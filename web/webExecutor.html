@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title></title>
+        <script>
+            PUBLIC_PATH = "./";
+            SDH_API_URL = "http://localhost:8080"; //TODO: solve CORS problems
+            SDH_API_KEY = ""; //TODO
+        </script>
+        <script src="vendor/requirejs/require.js"></script>
+        <script>
+            var chart; //Variable that will contain the object of the current chart
+            require(['require-config.js'], function() {
+
+                require(['WebBridge.js'], function() {
+                    Bridge.sendToPhantom("requireJsReady", {success: true});
+                }, function (err) {
+                    window.callPhantom({type: "requireJsReady", data: {success: false, error: err}});
+                });
+
+            }, function (err) {
+                window.callPhantom({type: "requireJsReady", data: {success: false, error: err}});
+            });
+        </script>
+        <link rel="stylesheet" href="vendor/sdh-framework/style/components.css">
+
+    </head>
+    <body>
+    </body>
+</html>

@@ -1,0 +1,9 @@
+Installation
+
+1. Clone sdh-image-capturer from this repository and then:
+   <npm install>
+
+
+Launch sdh-image-capturer:
+
+   phantomjs --web-security=false index.js
