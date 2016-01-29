@@ -39,14 +39,14 @@ WidgetSnapshotProvider.prototype = {
      * Initialize the web capturer.
      * @param onReady
      */
-    , init: function(onReady) {
+    , init: function(requireJsWidgetList, onReady) {
 
         if(typeof onReady !== 'function') {
             throw new Error(this.msg('A callback function must be specified in "init" method.'));
         }
 
         this.bridge = new Bridge(this.id);
-        this.bridge.initFramework(this.getWidgetList(), phantomWebMessageHandler.bind(this), onReady);
+        this.bridge.initFramework(requireJsWidgetList, phantomWebMessageHandler.bind(this), onReady);
 
 
     }
@@ -95,15 +95,6 @@ WidgetSnapshotProvider.prototype = {
         }
 
 
-    }
-
-    , getWidgetList: function() {
-        return [
-            {
-                'name': 'TimeBar',
-                'path': 'vendor/sdh-framework/framework.widget.timebar'
-            }
-        ]
     }
 
     , msg: function(txt) {

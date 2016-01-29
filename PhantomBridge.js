@@ -57,7 +57,7 @@ Bridge.prototype = {
         //TODO: create a debug option
         this.page.onConsoleMessage = function(msg, lineNum, sourceId) {
             console.log(this.msg('WEB-CONSOLE: ' + msg + ' (from line #' + lineNum + ' in "' + sourceId + '")'));
-        };
+        }.bind(this);
 
         // Message handler (between Phantom and the WebExecutor)
         this.page.onCallback = messageHandler.bind(this);
@@ -120,6 +120,7 @@ var messageHandler = function(data) {
 var frameworkInitializationWebFunction = function(widgets) {
 
     require(widgets, function() {
+
         window.framework.ready(function() {
             Bridge.sendToPhantom("frameworkReady", {success: true});
         });
@@ -150,14 +151,7 @@ var onFrameworkReady = function(data) {
 var onRequireJsReady = function(data) {
 
     if(data.success) {
-
-        var pathList = [];
-        for(var x = this.widgetList.length - 1; x >= 0; x--) {
-            pathList.push(this.widgetList[x]['path']);
-        }
-
-        this.page.evaluate(frameworkInitializationWebFunction, pathList);
-
+        this.page.evaluate(frameworkInitializationWebFunction, this.widgetList);
     } else {
         this.onReadyCallback(false);
     }

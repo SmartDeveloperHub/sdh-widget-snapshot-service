@@ -31,7 +31,7 @@ require.config({
         'require-css': 'vendor/require-css/css',
         'framework': "vendor/sdh-framework/framework",
         'headerHandler': "assets/js/header/headerHandler",
-        'widgetCommon': 'vendor/sdh-framework/framework.widget.common',
+        'widgetCommon': 'vendor/sdh-framework/widgets/Common/common',
         'bootstrap': "vendor/bootstrap/dist/js/bootstrap.min",
         'backbone': 'vendor/backbone/backbone-min',
         'underscore': 'vendor/underscore/underscore-min',

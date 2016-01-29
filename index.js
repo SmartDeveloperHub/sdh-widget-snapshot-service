@@ -23,31 +23,106 @@
 
 var NUMBER_WORKERS = 3;
 
+var fs = require('fs');
 var WidgetSnapshotProvider = require('./WidgetSnapshotProvider');
 var WorkerPool = require('./WorkerPool');
 
-var workerPool = new WorkerPool();
 
-var startedCount = 0;
-for(var i = 0; i < NUMBER_WORKERS; i++) {
-    var snapshotProvider = new WidgetSnapshotProvider(i);
-    snapshotProvider.init(function(snapshotProvider, success) {
+var workerPool = null;
+var widgets = null;
 
-        if(!success) {
-            console.error("Unable to init WidgetSnapshotProvider");
-            phantom.exit();
+var main = function() {
+
+    widgets = obtainWidgetList();
+
+    var requireJsWidgetList = [];
+
+    //Obtain the list to give to the snapshot providers
+    for(var i = widgets.length -1; i >= 0; i--) {
+        requireJsWidgetList.push(widgets[i].requireJsPath);
+    }
+
+    //Create a pool of workers
+    workerPool = new WorkerPool();
+
+    // Fill the pool with workers
+    var startedCount = 0;
+    for(var i = 0; i < NUMBER_WORKERS; i++) {
+        var snapshotProvider = new WidgetSnapshotProvider(i);
+        snapshotProvider.init(requireJsWidgetList, function(snapshotProvider, success) {
+
+            if(!success) {
+                console.error("Unable to init WidgetSnapshotProvider");
+                phantom.exit();
+            }
+
+            workerPool.add(snapshotProvider);
+            console.log("Worker " + snapshotProvider.id + " added to pool.");
+
+            if(++startedCount === NUMBER_WORKERS) {
+                startListening();
+            }
+
+        }.bind(null, snapshotProvider));
+
+    }
+
+};
+
+var obtainWidgetList = function() {
+
+    var widgetList = [];
+
+    //Check widget dir
+    var pathToWidgetDir = "web/vendor/sdh-framework/widgets/";
+    if(pathToWidgetDir.substr(-1, 1) !== '/') {
+        pathToWidgetDir += '/';
+    }
+    if(!fs.isDirectory(pathToWidgetDir) || !fs.isReadable(pathToWidgetDir)) {
+        throw new Error("Widget directory is not defined or not readable.");
+    }
+
+    //Get list of folders inside the widgets dir (one folder per widget)
+    var dirContents = fs.list(pathToWidgetDir);
+
+    // Read the config.json file of each widget
+    for(var x = 0; x < dirContents.length; x++) {
+
+        var folderPath = pathToWidgetDir + dirContents[x] + '/';
+        var configFile = folderPath + 'config.json';
+
+        if(fs.isFile(configFile) && fs.isReadable(configFile)) {
+            try {
+                var content = fs.read(configFile);
+                var config = JSON.parse(content);
+
+                config.main = config.main.trim();
+
+                var mainFilePath = folderPath + config.main;
+                var mainFileWithoutJs = (config.main.length >= 3 && config.main.substr(-3, 3) === '.js' ? config.main.substr(0, config.main.length - 3) : config.main);
+
+                //heck if main file exists
+                if(!fs.isFile(mainFilePath)) {
+                    console.warn('Could not find main file ' + mainFilePath);
+                    continue;
+                }
+
+                //Add it to the widget list
+                widgetList.push({
+                    name: config.name,
+                    main: config.main,
+                    requireJsPath: 'vendor/sdh-framework/widgets/' + dirContents[x] + '/' + mainFileWithoutJs
+                })
+
+            } catch(e) {
+                console.warn('Could not read configuration file ' + configFile);
+            }
         }
+    }
 
-        workerPool.add(snapshotProvider);
-        console.log("Worker " + snapshotProvider.id + " added to pool.");
+    return widgetList;
 
-        if(++startedCount === NUMBER_WORKERS) {
-            startListening();
-        }
-
-    }.bind(null, snapshotProvider));
-
-}
+};
 
 var startListening = function() {
     console.log("Listening for requests.");
@@ -102,3 +177,5 @@ var onJobFinished = function(snapshotProvider, fileName) {
     }
 
 };
+
+main();
