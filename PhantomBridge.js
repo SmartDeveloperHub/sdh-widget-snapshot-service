@@ -143,6 +143,7 @@ var onFrameworkReady = function(data) {
         this.onReadyCallback(true);
 
     } else {
+        console.error("Error in framework initialization!", data.error);
         this.onReadyCallback(false);
     }
 
@@ -153,6 +154,7 @@ var onRequireJsReady = function(data) {
     if(data.success) {
         this.page.evaluate(frameworkInitializationWebFunction, this.widgetList);
     } else {
+        console.error("Error in requireJs initialization!", data.error);
         this.onReadyCallback(false);
     }
 
