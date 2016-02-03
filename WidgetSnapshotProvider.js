@@ -68,7 +68,7 @@ WidgetSnapshotProvider.prototype = {
         return this.isReady;
     }
 
-    , getChartImage: function(chart, metrics, config, onImageReady) {
+    , getChartImage: function(chart, viewPort, metrics, config, onImageReady) {
 
         if(typeof onImageReady !== 'function')
             throw new Error(this.msg('A onImageReady function must be specified in "getChartImage" method.'));
@@ -84,6 +84,8 @@ WidgetSnapshotProvider.prototype = {
             onImageReady: onImageReady
         };
 
+        //Set the viewport
+        this.bridge.getPage().viewportSize = viewPort;
 
         //Load the chart in the web executor
         //The execution of the job will continue when the DATA_RECEIVED event is received
@@ -124,7 +126,7 @@ var processDataReceivedEvent = function() {
         // Execute the callback
         onImageReady(success ? fileName : undefined);
 
-    }.bind(this), 300);
+    }.bind(this), 500);
 
 };
 
@@ -174,7 +176,7 @@ var chartCreateWebFunction = function(chartType, metrics, config) {
         }
     }
 
-    $("body").append("<div id='chart' style='width: 300px;'></div>");
+    $("body").append("<div id='chart' style='width: 100%; height: 100%;'></div>");
 
     var domElement = document.getElementById("chart");
 

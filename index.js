@@ -158,13 +158,22 @@ var startListening = function() {
     //---------------
 };
 
-var executeJob = function(chart, metrics, configuration) {
+var executeJob = function(chart, metrics, configuration, viewport) {
 
     //TODO: no workers idle?
 
+    //If viewport is not set, set the default values
+    viewport = viewport || {};
+    viewport.height = viewport.height || 450;
+    viewport.width = viewport.width || 450;
+
+    if(configuration.height == null) {
+        configuration.height = viewport.height;
+    }
+
     var snapshotProvider = workerPool.getIdleAndSetBusy();
 
-    snapshotProvider.getChartImage("TimeBar", metrics, configuration, onJobFinished.bind(null, snapshotProvider));
+    snapshotProvider.getChartImage(chart, viewport, metrics, configuration, onJobFinished.bind(null, snapshotProvider));
 
 };
 
