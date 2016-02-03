@@ -87,6 +87,14 @@ WidgetSnapshotProvider.prototype = {
         //Set the viewport
         this.bridge.getPage().viewportSize = viewPort;
 
+        //Set the clipRect to be sure that the image generated is of the size we want
+        this.bridge.getPage().clipRect = {
+            top: 0,
+            left: 0,
+            width: viewPort.width,
+            height: viewPort.height
+        };
+
         //Load the chart in the web executor
         //The execution of the job will continue when the DATA_RECEIVED event is received
         var success = this.bridge.getPage().evaluate(chartCreateWebFunction, chart, metrics, config); //TODO: maybe asynchronous?
