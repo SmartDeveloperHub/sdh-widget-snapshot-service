@@ -21,18 +21,33 @@
 
 "use strict";
 
-var NUMBER_WORKERS = 3;
-
 var fs = require('fs');
+var webserver = require('webserver');
+var system = require('system');
+
 var WidgetSnapshotProvider = require('./WidgetSnapshotProvider');
 var WorkerPool = require('./WorkerPool');
 
-
 var workerPool = null;
 var widgets = null;
+var server = null;
+
+var NUMBER_WORKERS = 0;
+var LISTEN_PORT = 0;
+var LISTEN_IP = "127.0.0.1";
 
 var main = function() {
 
+    // Process parameters
+    if(system.args.length != 3 || system.args[1] == "" || system.args[2] == "") {
+        console.log('Usage: phantomjs  PhantomService.js  NUMBER_OF_WORKER  LISTEN_PORT');
+        phantom.exit();
+    }
+
+    NUMBER_WORKERS = parseInt(system.args[1]);
+    LISTEN_PORT = parseInt(system.args[2]);
+
+    //Get a list with information about available widgets
     widgets = obtainWidgetList();
 
     var requireJsWidgetList = [];
@@ -43,7 +58,7 @@ var main = function() {
     }
 
     //Create a pool of workers
-    workerPool = new WorkerPool();
+    workerPool = new WorkerPool(1);
 
     // Fill the pool with workers
     var startedCount = 0;
@@ -125,51 +140,94 @@ var obtainWidgetList = function() {
 };
 
 var startListening = function() {
-    console.log("Listening for requests.");
 
-    //TODO: this is a temporal simulation of jobs received from stdin/pipe
-    // ---------------------------------------------------
+    server = webserver.create();
 
-    var chart = "TimeBar";
+    var ok = server.listen(LISTEN_IP + ':' + LISTEN_PORT, function(request, response) {
 
-    var metrics = [{
-        id: 'product-success-rate',
-        max: 20,
-        prid: "product-sdh"
-    }];
+        if(request.method != 'GET') {
+            response.statusCode = 404;
+            response.close();
+        }
 
-    var configuration = {
-        height: 65,
-        color: function(val) {
-            var color = d3.scale.linear()
-                .domain([0, 0.5, 1])
-                .range(["red", "yellow", "green"]);
-            return color(val);
-        } + '', //To string
-        tooltip: '<h3>Value: ¬Math.round(_E.value * 100)/100¬</h3>' +
-        '<h3>Date: ¬Widget.format.date(_E.time)¬ </h3>',
-        legend: ['Success', 'Broken']
-    };
+        var requestUrlInfo = parseUrl(request.url);
 
-    //Multiple requests at the same time
-    executeJob(chart, metrics, configuration);
-    executeJob(chart, metrics, configuration);
+        switch(requestUrlInfo.pathname) {
+            case '/image':
+                handleGetImage(request, response, requestUrlInfo);
+                break;
+            default:
+                response.statusCode = 404;
+                response.close();
+        }
 
-    //---------------
+    });
+
+    if(!ok) {
+        console.error("Unable to start web server!");
+        phantom.exit();
+    }
+
+    console.log("Listening for requests in "+LISTEN_IP + ':' + LISTEN_PORT+ " ...");
+
 };
 
-var executeJob = function(chart, metrics, configuration, viewport) {
+var handleGetImage = function(request, response, requestUrlInfo) {
+
+    var onJobFinished = function(snapshotProvider, fileName) {
+
+        if(fileName != null) {
+            response.statusCode = 200;
+            response.write(fileName);
+        } else {
+            response.statusCode = 400;
+            response.write("Capture could not be done!"); //TODO: better error messages!
+        }
+
+        response.close();
+
+    };
+
+    try {
+
+        var chart, metrics, configuration, viewport;
+
+        chart = requestUrlInfo.params['chart'];
+
+        if(requestUrlInfo.params['metrics'] != null) {
+            metrics = JSON.parse(requestUrlInfo.params['metrics']);
+        } else {
+            throw new Error("Parameter 'metrics' is required.");
+        }
+
+        if(requestUrlInfo.params['configuration'] != null) {
+            configuration = JSON.parse(requestUrlInfo.params['configuration']);
+        } else {
+            configuration = {};
+        }
+
+        //If viewport is not set, set the default values
+        viewport = {};
+        viewport.height = requestUrlInfo.params['height'] || configuration['height'] || 450;
+        viewport.width = requestUrlInfo.params['width'] || 450;
+
+        if(configuration.height == null) {
+            configuration.height = viewport.height;
+        }
+
+        executeJob(chart, metrics, configuration, viewport, onJobFinished);
+
+    } catch(e) {
+        response.statusCode = 400;
+        response.write("Error in arguments: " + e); //TODO: better error messages!
+        response.close();
+    }
+
+};
+
+var executeJob = function(chart, metrics, configuration, viewport, onJobFinished) {
 
     //TODO: no workers idle?
-
-    //If viewport is not set, set the default values
-    viewport = viewport || {};
-    viewport.height = viewport.height || 450;
-    viewport.width = viewport.width || 450;
-
-    if(configuration.height == null) {
-        configuration.height = viewport.height;
-    }
 
     var snapshotProvider = workerPool.getIdleAndAddJob();
 
@@ -177,14 +235,30 @@ var executeJob = function(chart, metrics, configuration, viewport) {
 
 };
 
-var onJobFinished = function(snapshotProvider, fileName) {
+var parseUrl = function(url) {
+    var parser = document.createElement('a');
+    parser.href = decodeURI(url);
 
-    if(fileName != null) {
-        console.log(fileName);
-    } else {
-        console.error("Capture could not be done!");
+    var res = {
+        protocol: parser.protocol, // => "http:"
+        hostname: parser.hostname, // => "example.com"
+        port: parser.port,     // => "3000"
+        pathname: parser.pathname, // => "/pathname/"
+        search: parser.search,   // => "?search=test"
+        hash: parser.hash,     // => "#hash"
+        host: parser.host     // => "example.com:3000"
+    };
+
+    res.params = [];
+
+    var paramstr = res.search.split('?')[1];
+    var paramsarr = paramstr.split('&');
+    for (var i = 0; i < paramsarr.length; i++) {
+        var tmparr = paramsarr[i].split('=');
+        res.params[decodeURIComponent(tmparr[0])] = decodeURIComponent(tmparr[1]);
     }
 
+    return res;
 };
 
 main();
