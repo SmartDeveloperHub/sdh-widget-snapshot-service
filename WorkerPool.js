@@ -21,7 +21,8 @@
 
 "use strict";
 
-function WorkerPool () {
+function WorkerPool (jobsPerWorker) {
+    this.jobsPerWorker = jobsPerWorker || 1;
     this.busy = [];
     this.idle = [];
 }
@@ -30,7 +31,10 @@ WorkerPool.prototype = {
     constructor: WorkerPool,
 
     add: function(worker) {
-        this.idle.push(worker);
+        this.idle.push({
+            worker: worker,
+            jobs: 0
+        });
     },
 
     allBusy: function() {
@@ -41,20 +45,35 @@ WorkerPool.prototype = {
         return this.busy.length === 0;
     },
 
-    getIdleAndSetBusy: function() {
+    getIdleAndAddJob: function() {
         var worker = this.idle.pop();
         if(worker != null) {
-            this.busy.push(worker);
+            if(++worker.jobs < this.jobsPerWorker) { //Not all concurrent jobs reached so add it to the end of idle queue
+                this.idle.push(worker);
+            } else { // All concurrent jobs reached so add it to the busy queue
+                this.busy.push(worker);
+            }
         }
-        return worker;
+        return worker.worker;
     },
 
     setIdle: function(worker) {
-        var index = this.busy.indexOf(worker);
-        if(index != -1) {
-            this.idle.push(this.busy.splice(index, 1)[0]);
-        } else {
-            throw new Error("Worker could not be found in the busy list!");
+
+        var index = this.idle.indexOf(worker);
+
+        if(index >= 0) { //It is in the idle queue
+            this.idle[index]['jobs']--;
+
+        } else { //Try to find it in the busy queue
+
+            index = this.busy.indexOf(worker);
+
+            if(index != -1) {
+                this.busy[index]['jobs']--;
+                this.idle.push(this.busy.splice(index, 1)[0]);
+            } else {
+                throw new Error("Worker could not be found!");
+            }
         }
 
     },

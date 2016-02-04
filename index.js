@@ -171,7 +171,7 @@ var executeJob = function(chart, metrics, configuration, viewport) {
         configuration.height = viewport.height;
     }
 
-    var snapshotProvider = workerPool.getIdleAndSetBusy();
+    var snapshotProvider = workerPool.getIdleAndAddJob();
 
     snapshotProvider.getChartImage(chart, viewport, metrics, configuration, onJobFinished.bind(null, snapshotProvider));
 
