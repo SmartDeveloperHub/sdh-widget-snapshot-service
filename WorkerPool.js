@@ -59,14 +59,14 @@ WorkerPool.prototype = {
 
     setIdle: function(worker) {
 
-        var index = this.idle.indexOf(worker);
+        var index = indexOfWorkerInList(worker, this.idle);
 
         if(index >= 0) { //It is in the idle queue
             this.idle[index]['jobs']--;
 
         } else { //Try to find it in the busy queue
 
-            index = this.busy.indexOf(worker);
+            index = indexOfWorkerInList(worker, this.busy);
 
             if(index != -1) {
                 this.busy[index]['jobs']--;
@@ -79,8 +79,17 @@ WorkerPool.prototype = {
     },
 
     isBusy: function(worker) {
-        return this.busy.indexOf(worker) !== -1;
+        return indexOfWorkerInList(worker, this.busy) !== -1;
     }
+};
+
+var indexOfWorkerInList = function(worker, list) {
+    for(var i = 0; i < list.length; i++) {
+        if(list[i].worker === worker) {
+            return i;
+        }
+    }
+    return -1;
 };
 
 module.exports = WorkerPool;
