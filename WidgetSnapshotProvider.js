@@ -28,7 +28,6 @@ function WidgetSnapshotProvider (id) {
     this.creationDate = new Date();
     this.isReady = false;
     this.bridge = null;
-    this.onReadyCallback = null;
     this.currentJob = null;
 }
 
@@ -56,7 +55,6 @@ WidgetSnapshotProvider.prototype = {
         this.isReady = false;
         this.bridge.close();
         this.bridge = null;
-        this.onReadyCallback = null;
 
     }
 
@@ -68,7 +66,7 @@ WidgetSnapshotProvider.prototype = {
         return this.isReady;
     }
 
-    , getChartImage: function(chart, viewPort, metrics, config, onImageReady) {
+    , getChartImage: function(chart, viewPort, metrics, config, onImageReady, onError) {
 
         if(typeof onImageReady !== 'function')
             throw new Error(this.msg('A onImageReady function must be specified in "getChartImage" method.'));
@@ -81,7 +79,8 @@ WidgetSnapshotProvider.prototype = {
             chart: chart,
             metrics: metrics,
             config: config,
-            onImageReady: onImageReady
+            onImageReady: onImageReady,
+            onError: onError
         };
 
         //Set the viewport
@@ -101,7 +100,7 @@ WidgetSnapshotProvider.prototype = {
 
         if(!success) {
             this.bridge.getPage().evaluate(chartDeleteWebFunction);
-            onImageReady(); //Callback with empty file name
+            onError(); //Callback with empty file name
         }
 
 
@@ -138,6 +137,14 @@ var processDataReceivedEvent = function() {
 
 };
 
+var processErrorEvent = function(event, msg) {
+
+    //Clear the chart
+    this.bridge.getPage().evaluate(chartDeleteWebFunction);
+
+    this.currentJob.onError(undefined);
+};
+
 
 /**
  * This method handles all the messages sent from the webExecutor to Phantom
@@ -146,6 +153,7 @@ var processDataReceivedEvent = function() {
 var phantomWebMessageHandler = function(data) {
     switch (data.type) {
         case 'DATA_RECEIVED': processDataReceivedEvent.call(this); break;
+        case 'ERROR': processErrorEvent.call(this); break;
         default:
             console.warn(this.msg("Received unknown type in phantomWebMessageHandler!"));
             break;
@@ -191,6 +199,12 @@ var chartCreateWebFunction = function(chartType, metrics, config) {
     try {
         var constructor = framework.widgets[chartType];
         if(constructor != null) {
+
+            //Handle errors
+            constructor.prototype.onError = function(msg) {
+                Bridge.sendToPhantom("ERROR", null, msg);
+            };
+
             window.chart = new constructor(domElement, metrics, [], config);
             Bridge.transmitEvent(window.chart, "DATA_RECEIVED");
             return true;

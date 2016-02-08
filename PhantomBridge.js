@@ -119,6 +119,10 @@ var messageHandler = function(data) {
 
 var frameworkInitializationWebFunction = function(widgets) {
 
+    $(window).on("FRAMEWORK_INITIALIZATION_ERROR", function(event, d) {
+        Bridge.sendToPhantom("frameworkReady", {success: false, error: d});
+    });
+
     require(widgets, function() {
 
         window.framework.ready(function() {

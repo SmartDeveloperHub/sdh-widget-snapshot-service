@@ -36,6 +36,9 @@ var NUMBER_WORKERS = 0;
 var LISTEN_PORT = 0;
 var LISTEN_IP = "127.0.0.1";
 
+var PROVIDER_INITIALIZATION_ERROR = 1;
+var API_INITIALIZATION_ERROR = 2;
+
 var main = function() {
 
     // Process parameters
@@ -68,7 +71,7 @@ var main = function() {
 
             if(!success) {
                 console.error("Unable to init WidgetSnapshotProvider");
-                phantom.exit();
+                phantom.exit(PROVIDER_INITIALIZATION_ERROR);
             }
 
             workerPool.add(snapshotProvider);
@@ -165,7 +168,7 @@ var startListening = function() {
 
     if(!ok) {
         console.error("Unable to start web server!");
-        phantom.exit();
+        phantom.exit(API_INITIALIZATION_ERROR);
     }
 
     console.log("Listening for requests in "+LISTEN_IP + ':' + LISTEN_PORT+ " ...");
@@ -186,6 +189,12 @@ var handleGetImage = function(request, response, requestUrlInfo) {
 
         response.close();
 
+    };
+
+    var onJobError = function(snapshotProvider, msg) {
+        response.statusCode = 400;
+        response.write((msg ? "Error in resource: " + msg : "Error while creating the chart"));
+        response.close();
     };
 
     try {
@@ -215,7 +224,7 @@ var handleGetImage = function(request, response, requestUrlInfo) {
             configuration.height = viewport.height;
         }
 
-        executeJob(chart, metrics, configuration, viewport, onJobFinished);
+        executeJob(chart, metrics, configuration, viewport, onJobFinished, onJobError);
 
     } catch(e) {
         response.statusCode = 400;
@@ -225,13 +234,15 @@ var handleGetImage = function(request, response, requestUrlInfo) {
 
 };
 
-var executeJob = function(chart, metrics, configuration, viewport, onJobFinished) {
+var executeJob = function(chart, metrics, configuration, viewport, onJobFinished, onJobError) {
 
     //TODO: no workers idle?
 
     var snapshotProvider = workerPool.getIdleAndAddJob();
 
-    snapshotProvider.getChartImage(chart, viewport, metrics, configuration, onJobFinished.bind(null, snapshotProvider));
+    snapshotProvider.getChartImage(chart, viewport, metrics, configuration,
+        onJobFinished.bind(null, snapshotProvider),
+        onJobError.bind(null, snapshotProvider));
 
 };
 
