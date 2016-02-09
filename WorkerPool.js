@@ -53,8 +53,11 @@ WorkerPool.prototype = {
             } else { // All concurrent jobs reached so add it to the busy queue
                 this.busy.push(worker);
             }
+            return worker.worker;
         }
-        return worker.worker;
+
+        return null; //Null in case there are no idle workers
+
     },
 
     setIdle: function(worker) {
