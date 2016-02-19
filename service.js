@@ -27,26 +27,18 @@ const net = require('net');
 const http = require('http');
 const fs = require('fs');
 const WorkerPool = require('./WorkerPool');
+const Config = require('./config');
 
-var PORT_SEARCH_BEGIN = 45032; //Number of port to start looking for free ports
-var LISTEN_PORT = 0;
-var NUMBER_WORKERS = 0;
-var NUMBER_EXECUTORS_PER_WORKER = 0;
+var PORT_SEARCH_BEGIN = Config.phantom.start_port; //Number of port to start looking for free ports
+var LISTEN_PORT = Config.port;
+var NUMBER_WORKERS = Config.phantom.workers;
+var NUMBER_EXECUTORS_PER_WORKER = Config.phantom.executors_per_worker;
 
 var workerPool = null;
 var jobQueue = [];
 var app = express();
 
 var start = function() {
-
-    // Check arguments
-    if(process.argv.length == 5 ) {
-        NUMBER_WORKERS = parseInt(process.argv[2]);
-        NUMBER_EXECUTORS_PER_WORKER = parseInt(process.argv[3]);
-        LISTEN_PORT = parseInt(process.argv[4]);
-    } else {
-        console.log("Usage: node service.js  NUMBER_WORKERS  NUMBER_EXECUTORS_PER_WORKER  LISTEN_PORT");
-    }
 
     //First spawn the phantom processes that will serve the requests
     //Once all the workers are ready start the API service
