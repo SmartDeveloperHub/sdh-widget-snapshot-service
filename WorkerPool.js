@@ -46,7 +46,7 @@ WorkerPool.prototype = {
     },
 
     getIdleAndAddJob: function() {
-        var worker = this.idle.pop();
+        var worker = this.idle.shift();
         if(worker != null) {
             if(++worker.jobs < this.jobsPerWorker) { //Not all concurrent jobs reached so add it to the end of idle queue
                 this.idle.push(worker);
