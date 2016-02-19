@@ -19,30 +19,33 @@
     #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=#
 */
 
-var express = require('express');
-var app = express();
-var path = require('path');
-var childProcess = require('child_process');
-var phantomjs = require('phantomjs-prebuilt');
-var net = require('net');
-var http = require('http');
-var WorkerPool = require('./WorkerPool');
+const express = require('express');
+const path = require('path');
+const childProcess = require('child_process');
+const phantomjs = require('phantomjs-prebuilt');
+const net = require('net');
+const http = require('http');
+const fs = require('fs');
+const WorkerPool = require('./WorkerPool');
 
 var PORT_SEARCH_BEGIN = 45032; //Number of port to start looking for free ports
 var LISTEN_PORT = 0;
 var NUMBER_WORKERS = 0;
-var NUMBER_WORKERS_PER_WORKER = 0;
+var NUMBER_EXECUTORS_PER_WORKER = 0;
+
 var workerPool = null;
+var jobQueue = [];
+var app = express();
 
 var start = function() {
 
     // Check arguments
     if(process.argv.length == 5 ) {
         NUMBER_WORKERS = parseInt(process.argv[2]);
-        NUMBER_WORKERS_PER_WORKER = parseInt(process.argv[3]);
+        NUMBER_EXECUTORS_PER_WORKER = parseInt(process.argv[3]);
         LISTEN_PORT = parseInt(process.argv[4]);
     } else {
-        console.log("Usage: node service.js  NUMBER_WORKERS  NUMBER_WORKERS_PER_WORKER  LISTEN_PORT");
+        console.log("Usage: node service.js  NUMBER_WORKERS  NUMBER_EXECUTORS_PER_WORKER  LISTEN_PORT");
     }
 
     //First spawn the phantom processes that will serve the requests
@@ -57,7 +60,7 @@ var startPhantomWorkers = function(callback) {
     var phantomJsExecutable = phantomjs.path;
 
     var workersReady = 0;
-    workerPool = new WorkerPool(NUMBER_WORKERS_PER_WORKER);
+    workerPool = new WorkerPool(NUMBER_EXECUTORS_PER_WORKER);
 
     var launchWorker = function() {
 
@@ -67,20 +70,24 @@ var startPhantomWorkers = function(callback) {
             var childArgs = [
                 "--web-security=false",
                 path.join(__dirname, 'PhantomService.js'),
-                NUMBER_WORKERS_PER_WORKER,
+                NUMBER_EXECUTORS_PER_WORKER,
                 port
             ];
 
-            //Spawn the worker process
-            var res = childProcess.execFile(phantomJsExecutable, childArgs);
+            // Spawn the worker process
+            var proc = childProcess.execFile(phantomJsExecutable, childArgs);
             //TODO: handle case in which a worker dies
 
-            res.stdout.on('data', function(data) {
+            proc.stdout.on('data', function(data) {
                     console.log("[PhantomService]["+port+"]: " + data);
             });
 
+            proc.stderr.on('data', function(data) {
+                console.error("[PhantomService]["+port+"]: " + data);
+            });
+
             workerPool.add({
-                process: res,
+                process: proc,
                 port: port
             });
 
@@ -101,35 +108,7 @@ var startPhantomWorkers = function(callback) {
 
 var startApiService = function() {
 
-    app.get('/image', function (req, res) {
-
-        //Select the worker that will handle this request
-        var worker = workerPool.getIdleAndAddJob();
-
-        console.log(req.originalUrl);
-        console.log("Port: " + worker.port);
-
-        http.get({
-            hostname: '127.0.0.1',
-            port: worker.port,
-            path: req.originalUrl
-        }, function(response) {
-            // Continuously update stream with data
-            var body = '';
-            response.on('data', function(d) {
-                body += d;
-            });
-            response.on('end', function() {
-
-                workerPool.setIdle(worker);
-
-                console.log("Sending file: " + body);
-                res.sendFile(body);
-
-            });
-        });
-
-    });
+    app.get('/image', handleImageRequest);
 
     app.listen(LISTEN_PORT, function () {
         console.log('Service is now listening on port '+LISTEN_PORT+'!');
@@ -137,7 +116,134 @@ var startApiService = function() {
 
 };
 
+var handleImageRequest = function(req, res, fromQueue) {
 
+    //Select the worker that will handle this request
+    var worker = workerPool.getIdleAndAddJob();
+
+    if(worker != null) {
+
+        console.log("Request:" + req.originalUrl);
+        console.log("Port: " + worker.port);
+
+        http.get(
+            {
+                hostname: '127.0.0.1',
+                port: worker.port,
+                path: req.originalUrl
+            },
+            handlePhantomResponse.bind(null, worker, req, res)
+        );
+
+    } else { // No idle workers, queue request
+
+        queueJob(req, res, fromQueue, handleImageRequest);
+
+    }
+
+};
+
+var handlePhantomResponse = function(worker, apiRequest, apiResponse, workerResponse) {
+
+    switch(workerResponse.statusCode) {
+
+        case 200: // Image was generated without errors
+
+            readResponseBody(workerResponse, function(body) {
+
+                // Mark the worker as idle
+                workerPool.setIdle(worker);
+
+                // Send the file through the connection and then delete the file
+                apiResponse.sendFile(body, function (err) {
+
+                    if (err) {
+                        console.log(err);
+                        apiResponse.status(err.status).end();
+                    } else {
+                        fs.unlink(body); //Remove the temporal file
+                    }
+                });
+
+                // Start next job
+                nextJob();
+
+            });
+
+            break;
+
+        case 503: // This case should not happen as the service keeps to count of jobs per worker
+
+            console.error('The worker was not idle!!');
+
+            // Try to reprocess it
+            handleImageRequest(apiRequest, apiResponse, true);
+
+            break;
+
+        default: // Some error happened
+
+            readResponseBody(workerResponse, function(body) {
+
+                workerPool.setIdle(worker);
+
+                if(body.length > 0) {
+                    apiResponse.status(workerResponse.statusCode).send(body);
+                } else {
+                    apiResponse.status(workerResponse.statusCode).end();
+                }
+
+                //Start next job
+                nextJob();
+
+            });
+
+            break;
+    }
+
+};
+
+var readResponseBody = function(response, callback) {
+
+    // Continuously update stream with data
+    var body = '';
+    response.on('data', function(d) {
+        body += d;
+    });
+    response.on('end', function() {
+        callback(body);
+    });
+
+};
+
+var queueJob = function(req, res, onTop, method) {
+
+    // If it has priority, put it at the beginning of the queue
+    if(onTop) {
+        jobQueue.unshift({
+            req: req,
+            res: res,
+            method: method
+        });
+
+    } else {
+        jobQueue.push({
+            req: req,
+            res: res,
+            method: method
+        });
+    }
+};
+
+var nextJob = function() {
+
+    var job = jobQueue.shift();
+
+    if(job != null) {
+        job.method(job.req, job.res, true);
+    }
+
+};
 
 function getPort (cb) {
     var port = PORT_SEARCH_BEGIN;

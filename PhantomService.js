@@ -179,6 +179,8 @@ var handleGetImage = function(request, response, requestUrlInfo) {
 
     var onJobFinished = function(snapshotProvider, fileName) {
 
+        workerPool.setIdle(snapshotProvider);
+
         if(fileName != null) {
             response.statusCode = 200;
             response.write(fileName);
@@ -192,6 +194,9 @@ var handleGetImage = function(request, response, requestUrlInfo) {
     };
 
     var onJobError = function(snapshotProvider, msg) {
+
+        workerPool.setIdle(snapshotProvider);
+
         response.statusCode = 400;
         response.write((msg ? "Error in resource: " + msg : "Error while creating the chart"));
         response.close();
@@ -224,7 +229,13 @@ var handleGetImage = function(request, response, requestUrlInfo) {
             configuration.height = viewport.height;
         }
 
-        executeJob(chart, metrics, configuration, viewport, onJobFinished, onJobError);
+        var ok = executeJob(chart, metrics, configuration, viewport, onJobFinished, onJobError);
+
+        if(!ok) { //Could not find an idle worker
+            response.statusCode = 503;
+            response.write("No workers available");
+            response.close();
+        }
 
     } catch(e) {
         response.statusCode = 400;
@@ -236,13 +247,18 @@ var handleGetImage = function(request, response, requestUrlInfo) {
 
 var executeJob = function(chart, metrics, configuration, viewport, onJobFinished, onJobError) {
 
-    //TODO: no workers idle?
-
     var snapshotProvider = workerPool.getIdleAndAddJob();
 
-    snapshotProvider.getChartImage(chart, viewport, metrics, configuration,
-        onJobFinished.bind(null, snapshotProvider),
-        onJobError.bind(null, snapshotProvider));
+    if(snapshotProvider != null) {
+        snapshotProvider.getChartImage(chart, viewport, metrics, configuration,
+            onJobFinished.bind(null, snapshotProvider),
+            onJobError.bind(null, snapshotProvider));
+
+        return true;
+
+    } else { //No idle workers
+        return false;
+    }
 
 };
 
