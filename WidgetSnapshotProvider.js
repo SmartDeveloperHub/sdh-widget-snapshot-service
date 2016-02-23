@@ -23,8 +23,9 @@
 
 var Bridge = require('./PhantomBridge');
 
-function WidgetSnapshotProvider (id) {
+function WidgetSnapshotProvider (id, timeout) {
     this.id = id;
+    this.timeout = timeout;
     this.creationDate = new Date();
     this.isReady = false;
     this.bridge = null;
@@ -96,7 +97,7 @@ WidgetSnapshotProvider.prototype = {
 
         //Load the chart in the web executor
         //The execution of the job will continue when the DATA_RECEIVED event is received
-        var success = this.bridge.getPage().evaluate(chartCreateWebFunction, chart, metrics, config); //TODO: maybe asynchronous?
+        var success = this.bridge.getPage().evaluate(chartCreateWebFunction, chart, metrics, config, this.timeout); //TODO: maybe asynchronous?
 
         if(!success) {
             this.bridge.getPage().evaluate(chartDeleteWebFunction);
@@ -183,9 +184,10 @@ var chartDeleteWebFunction = function() {
  * @param chartType Name of the class of the chart (the name with which the chart is registered in the sdh-framework).
  * @param metrics Metrics array to pass to the chart constructor.
  * @param config Configuration to pass to the chart constructor.
+ * @param timeout Maximum execution time
  * @returns {boolean}
  */
-var chartCreateWebFunction = function(chartType, metrics, config) {
+var chartCreateWebFunction = function(chartType, metrics, config, timeout) {
 
     //TODO: allow functions in config??
     for(var param in config) {
@@ -219,7 +221,7 @@ var chartCreateWebFunction = function(chartType, metrics, config) {
                 window.chartTimeout = null;
                 Bridge.sendToPhantom("ERROR", "Max execution time reached!");
 
-            }, 15000);
+            }, timeout);
 
             return true;
         }

@@ -62,7 +62,6 @@ var startPhantomWorkers = function(callback) {
             var childArgs = [
                 "--web-security=false",
                 path.join(__dirname, 'PhantomService.js'),
-                NUMBER_EXECUTORS_PER_WORKER,
                 port
             ];
 
