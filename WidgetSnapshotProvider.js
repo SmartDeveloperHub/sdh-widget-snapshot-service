@@ -103,7 +103,6 @@ WidgetSnapshotProvider.prototype = {
             onError(); //Callback with empty file name
         }
 
-
     }
 
     , msg: function(txt) {
@@ -137,12 +136,12 @@ var processDataReceivedEvent = function() {
 
 };
 
-var processErrorEvent = function(event, msg) {
+var processErrorEvent = function(msg) {
 
     //Clear the chart
     this.bridge.getPage().evaluate(chartDeleteWebFunction);
 
-    this.currentJob.onError(undefined);
+    this.currentJob.onError(msg);
 };
 
 
@@ -153,7 +152,7 @@ var processErrorEvent = function(event, msg) {
 var phantomWebMessageHandler = function(data) {
     switch (data.type) {
         case 'DATA_RECEIVED': processDataReceivedEvent.call(this); break;
-        case 'ERROR': processErrorEvent.call(this); break;
+        case 'ERROR': processErrorEvent.call(this, data.data); break;
         default:
             console.warn(this.msg("Received unknown type in phantomWebMessageHandler!"));
             break;
@@ -182,8 +181,6 @@ var chartDeleteWebFunction = function() {
  */
 var chartCreateWebFunction = function(chartType, metrics, config) {
 
-    //TODO: size of the image
-
     //TODO: allow functions in config??
     for(var param in config) {
         var val = config[param];
@@ -202,11 +199,22 @@ var chartCreateWebFunction = function(chartType, metrics, config) {
 
             //Handle errors
             constructor.prototype.onError = function(msg) {
-                Bridge.sendToPhantom("ERROR", null, msg);
+                Bridge.sendToPhantom("ERROR", msg);
             };
 
             window.chart = new constructor(domElement, metrics, [], config);
-            Bridge.transmitEvent(window.chart, "DATA_RECEIVED");
+            Bridge.transmitEventAndExecute(window.chart, "DATA_RECEIVED", function() {
+                clearTimeout(window.chartTimeout);
+                window.chartTimeout = null;
+            });
+
+            //Set a timeout
+            window.chartTimeout = setTimeout(function() {
+                window.chartTimeout = null;
+                Bridge.sendToPhantom("ERROR", "Max execution time reached!");
+
+            }, 15000);
+
             return true;
         }
 

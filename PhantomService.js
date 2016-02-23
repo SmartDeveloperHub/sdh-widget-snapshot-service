@@ -198,7 +198,7 @@ var handleGetImage = function(request, response, requestUrlInfo) {
         workerPool.setIdle(snapshotProvider);
 
         response.statusCode = 400;
-        response.write((msg ? "Error in resource: " + msg : "Error while creating the chart"));
+        response.write((msg ? "Error: " + msg : "Error while creating the chart"));
         response.close();
     };
 

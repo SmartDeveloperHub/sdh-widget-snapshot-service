@@ -35,6 +35,13 @@
                 });
             },
 
+            transmitEventAndExecute: function(obj, event, func) {
+                $(obj).on(event, function(e) {
+                    func();
+                    Bridge.sendToPhantom(event, e);
+                });
+            },
+
             stopEventTransmission: function(obj, event) {
                 $(obj).off(event);
             }
