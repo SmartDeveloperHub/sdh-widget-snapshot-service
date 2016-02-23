@@ -209,7 +209,7 @@ var chartCreateWebFunction = function(chartType, metrics, config) {
             };
 
             window.chart = new constructor(domElement, metrics, [], config);
-            Bridge.transmitEventAndExecute(window.chart, "DATA_RECEIVED", function() {
+            Bridge.transmitEventAndExecute(window.chart, "DATA_RECEIVED", false, function() {
                 clearTimeout(window.chartTimeout);
                 window.chartTimeout = null;
             });

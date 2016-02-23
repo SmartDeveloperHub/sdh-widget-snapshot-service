@@ -29,16 +29,23 @@
                 window.callPhantom({type: type, data: data});
             },
 
-            transmitEvent: function(obj, event) {
-                $(obj).on(event, function(e) {
-                    Bridge.sendToPhantom(event, e);
-                });
+            transmitEvent: function(obj, event, sendArgs) {
+                this.transmitEventAndExecute(obj, event, sendArgs);
             },
 
-            transmitEventAndExecute: function(obj, event, func) {
+            transmitEventAndExecute: function(obj, event, sendArgs, func) {
                 $(obj).on(event, function(e) {
-                    func();
-                    Bridge.sendToPhantom(event, e);
+
+                    var data = null;
+                    if(sendArgs === true) {
+                        data = [];
+                        for(var i = 1; i < arguments.length; i++) {
+                            data.push(arguments[i]);
+                        }
+                    }
+
+                    if(typeof func === 'function') func();
+                    Bridge.sendToPhantom(event, data);
                 });
             },
 
