@@ -72,7 +72,7 @@ WidgetSnapshotProvider.prototype = {
             throw new Error(this.msg('A onImageReady function must be specified in "getChartImage" method.'));
 
         if(this.currentJob != null) {
-            return false; //This means this WidgetSnapshotProvider is busy
+            throw new Error(this.msg('The WidgetSnapshotProvider instance is busy!'));
         }
 
         this.currentJob = {
@@ -126,6 +126,7 @@ var processDataReceivedEvent = function() {
         //Clear the chart
         this.bridge.getPage().evaluate(chartDeleteWebFunction);
 
+        // Clear the current job information
         var onImageReady = this.currentJob.onImageReady;
         this.currentJob = null;
 
@@ -141,7 +142,12 @@ var processErrorEvent = function(msg) {
     //Clear the chart
     this.bridge.getPage().evaluate(chartDeleteWebFunction);
 
-    this.currentJob.onError(msg);
+    // Clear the current job information
+    var onError = this.currentJob.onError;
+    this.currentJob = null;
+
+    // Execute error callback
+    onError(msg);
 };
 
 
