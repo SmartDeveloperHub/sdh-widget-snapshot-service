@@ -31,7 +31,9 @@
   "dependencies": {
     "bower": "*",
     "phantomjs-prebuilt": "2.x.x",
-    "express": "~4.13.4"
+    "express": "~4.13.4",
+    "body-parser": "~1.15.0",
+    "node-uuid": "~1.4.7"
   },
   "scripts": {
     "postinstall": "bower --allow-root --config.interactive=false install"

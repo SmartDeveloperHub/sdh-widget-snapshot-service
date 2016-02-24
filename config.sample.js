@@ -2,6 +2,11 @@ var config = {};
 
 config.port = 8888; // Port to start listening in
 
+config.persistence = {};
+config.persistence.prefix = "wss_image_";
+config.persistence.directory = "/tmp/";
+config.persistence.max_size = 10485760; //10MB in bytes
+
 config.phantom = {};
 config.phantom.workers = 1; // Number of phantom processes
 config.phantom.executors_per_worker = 1; // Number of executors (something like "browsers") per process

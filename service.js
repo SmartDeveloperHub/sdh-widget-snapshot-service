@@ -28,12 +28,13 @@ const http = require('http');
 const fs = require('fs');
 const WorkerPool = require('./WorkerPool');
 const JobQueue = require('./JobQueue');
-const Config = require('./config');
+const config = require('./config');
+const uuid = require('node-uuid');
 
-var PORT_SEARCH_BEGIN = Config.phantom.start_port; //Number of port to start looking for free ports
-var LISTEN_PORT = Config.port;
-var NUMBER_WORKERS = Config.phantom.workers;
-var NUMBER_EXECUTORS_PER_WORKER = Config.phantom.executors_per_worker;
+var PORT_SEARCH_BEGIN = config.phantom.start_port; //Number of port to start looking for free ports
+var LISTEN_PORT = config.port;
+var NUMBER_WORKERS = config.phantom.workers;
+var NUMBER_EXECUTORS_PER_WORKER = config.phantom.executors_per_worker;
 
 var workerPool = null;
 var jobQueue = null;
@@ -41,12 +42,16 @@ var app = express();
 
 var start = function() {
 
-    //First spawn the phantom processes that will serve the requests
-    //Once all the workers are ready start the API service
-    startPhantomWorkers( startApiService );
+    // First spawn the phantom processes that will serve the requests
+    startPhantomWorkers( function() {
 
-    // Create a job queue using the worker pool that has been created
-    jobQueue = new JobQueue(workerPool);
+        // Create a job queue using the worker pool that has been created
+        jobQueue = new JobQueue(workerPool);
+
+        // Once all the workers are ready start the API service
+        startApiService();
+
+    } );
 
 };
 
@@ -103,10 +108,17 @@ var startPhantomWorkers = function(callback) {
 
 var startApiService = function() {
 
+    var bodyParser = require('body-parser');
+
+    // Configure express
+    app.use(bodyParser.json());       // to support JSON-encoded bodies
+
+    // Endpoints
     app.get('/image', handleImageGetRequest);
     app.post('/job/image', handleImageCreateJobPostRequest);
     app.get('/job/image/:id', handleImageJobGetRequest);
 
+    // Start listening for requests
     app.listen(LISTEN_PORT, function () {
         console.log('Service is now listening on port '+LISTEN_PORT+'!');
     });
@@ -115,10 +127,86 @@ var startApiService = function() {
 
 var handleImageCreateJobPostRequest = function(req, res) {
 
+    var phantomServiceUrl = "/image" +
+        "?chart=" + encodeURIComponent(req.body.chart) +
+        "&metrics=" + encodeURIComponent(JSON.stringify(req.body.metrics)) +
+        "&configuration=" + encodeURIComponent(JSON.stringify(req.body.configuration));
+
+    if(req.body.height && !Number.isNaN(Number.parseFloat(req.body.height))) {
+        phantomServiceUrl += "&height="+encodeURIComponent(Number.parseFloat(req.body.height));
+    }
+
+    if(req.body.width && !Number.isNaN(Number.parseFloat(req.body.width))) {
+        phantomServiceUrl += "&width="+encodeURIComponent(Number.parseFloat(req.body.width));
+    }
+
+    var jobData = {
+        imageUrl: phantomServiceUrl,
+        callback: function(statusCode, body) {
+
+            switch(statusCode) {
+                case 200:
+
+                    //TODO: return an url to retrieve the generated image
+                    var fileId = uuid.v4();
+                    var newFilePath = path.join(
+                        config.persistence.directory,
+                        config.persistence.prefix + fileId + ".png"
+                    );
+
+                    //TODO: implement max size of files directory
+                    //TODO: return information about the creation date
+
+                    fs.rename(body, newFilePath, function(err) {
+
+                        if (err) {
+                            console.log("Error moving " + body + " to " + newFilePath, err);
+                            fs.unlink(body); //Remove the temporal file
+                            res.status(500).end();
+                        } else {
+                            res.location(req.protocol + '://' + req.get('host') + '/job/image/' + fileId).end();
+                        }
+
+                    });
+
+                    break;
+
+                default:
+
+                    if(body.length > 0) {
+                        res.status(statusCode).send(body);
+                    } else {
+                        res.status(statusCode).end();
+                    }
+
+                    break;
+
+            }
+
+        }
+    };
+
+    jobQueue.executeOrQueueJob(makePhantomImageRequest, false, jobData);
+
 };
 
 
 var handleImageJobGetRequest = function(req, res) {
+
+
+    //TODO: check security
+    var filePath = path.join(
+        config.persistence.directory,
+        config.persistence.prefix + req.params.id + ".png"
+    );
+
+    res.sendFile(filePath, function (err) {
+
+        if (err) {
+            console.log(err);
+            res.status(404).end();
+        }
+    });
 
 };
 
@@ -135,7 +223,7 @@ var handleImageGetRequest = function(req, res) {
 
                         if (err) {
                             console.log(err);
-                            res.status(err.status).end();
+                            res.status(500).end();
                         } else {
                             fs.unlink(body); //Remove the temporal file
                         }
