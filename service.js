@@ -99,7 +99,9 @@ var startPhantomWorkers = function(callback) {
 
 var startApiService = function() {
 
-    app.get('/image', handleImageRequest);
+    app.get('/image', handleImageGetRequest);
+    app.post('/job/image', handleImageCreateJobPostRequest);
+    app.get('/job/image/:id', handleImageJobGetRequest);
 
     app.listen(LISTEN_PORT, function () {
         console.log('Service is now listening on port '+LISTEN_PORT+'!');
@@ -107,54 +109,84 @@ var startApiService = function() {
 
 };
 
-var handleImageRequest = function(req, res, fromQueue) {
-
-    //Select the worker that will handle this request
-    var worker = workerPool.getIdleAndAddJob();
-
-    if(worker != null) {
-
-        console.log("Request:" + req.originalUrl);
-        console.log("Port: " + worker.port);
-
-        http.get(
-            {
-                hostname: '127.0.0.1',
-                port: worker.port,
-                path: req.originalUrl
-            },
-            handlePhantomResponse.bind(null, worker, req, res)
-        );
-
-    } else { // No idle workers, queue request
-
-        queueJob(req, res, fromQueue, handleImageRequest);
-
-    }
+var handleImageCreateJobPostRequest = function(req, res) {
 
 };
 
-var handlePhantomResponse = function(worker, apiRequest, apiResponse, workerResponse) {
 
-    switch(workerResponse.statusCode) {
+var handleImageJobGetRequest = function(req, res) {
+
+};
+
+var handleImageGetRequest = function(req, res) {
+
+    var jobData = {
+        imageUrl: req.originalUrl,
+        callback: function(statusCode, body) {
+
+            switch(statusCode) {
+                case 200:
+
+                    res.sendFile(body, function (err) {
+
+                        if (err) {
+                            console.log(err);
+                            res.status(err.status).end();
+                        } else {
+                            fs.unlink(body); //Remove the temporal file
+                        }
+                    });
+
+                    break;
+
+                default:
+
+                    if(body.length > 0) {
+                        res.status(statusCode).send(body);
+                    } else {
+                        res.status(statusCode).end();
+                    }
+
+                    break;
+
+            }
+
+        }
+    };
+
+    executeOrQueueJob(makePhantomImageRequest, false, jobData);
+
+};
+
+var makePhantomImageRequest = function(worker, jobData) {
+
+    console.log("Request:" + jobData.imageUrl);
+    console.log("Port: " + worker.port);
+
+    http.get(
+        {
+            hostname: '127.0.0.1',
+            port: worker.port,
+            path: jobData.imageUrl
+        },
+        handlePhantomImageResponse.bind(null, worker, jobData)
+    );
+
+};
+
+
+var handlePhantomImageResponse = function(worker, jobData, response) {
+
+    switch(response.statusCode) {
 
         case 200: // Image was generated without errors
 
-            readResponseBody(workerResponse, function(body) {
+            readResponseBody(response, function(body) {
 
                 // Mark the worker as idle
                 workerPool.setIdle(worker);
 
-                // Send the file through the connection and then delete the file
-                apiResponse.sendFile(body, function (err) {
-
-                    if (err) {
-                        console.log(err);
-                        apiResponse.status(err.status).end();
-                    } else {
-                        fs.unlink(body); //Remove the temporal file
-                    }
-                });
+                jobData.callback(response.statusCode, body);
 
                 // Start next job
                 nextJob();
@@ -168,21 +200,17 @@ var handlePhantomResponse = function(worker, apiRequest, apiResponse, workerResp
             console.error('The worker was not idle!!');
 
             // Try to reprocess it
-            handleImageRequest(apiRequest, apiResponse, true);
+            executeOrQueueJob(makePhantomImageRequest, true, jobData);
 
             break;
 
         default: // Some error happened
 
-            readResponseBody(workerResponse, function(body) {
+            readResponseBody(response, function(body) {
 
                 workerPool.setIdle(worker);
 
-                if(body.length > 0) {
-                    apiResponse.status(workerResponse.statusCode).send(body);
-                } else {
-                    apiResponse.status(workerResponse.statusCode).end();
-                }
+                jobData.callback(response.statusCode, body);
 
                 //Start next job
                 nextJob();
@@ -207,31 +235,50 @@ var readResponseBody = function(response, callback) {
 
 };
 
-var queueJob = function(req, res, onTop, method) {
+var queueJob = function(method, onTop, data) {
 
     // If it has priority, put it at the beginning of the queue
     if(onTop) {
         jobQueue.unshift({
-            req: req,
-            res: res,
+            data: data,
             method: method
         });
 
     } else {
         jobQueue.push({
-            req: req,
-            res: res,
+            data: data,
             method: method
         });
     }
 };
 
-var nextJob = function() {
+var nextJob = function(worker) {
 
     var job = jobQueue.shift();
 
     if(job != null) {
-        job.method(job.req, job.res, true);
+        job.method(worker, job.data);
+    }
+
+};
+
+var executeOrQueueJob = function(method, onTop, data) {
+
+    //Select the worker that will handle this request
+    var worker = workerPool.getIdleAndAddJob();
+
+    if(worker != null && jobQueue.length === 0) { //If an idle worker is found and this is the only job
+        method(worker, data);
+
+    }else if(worker != null) { // If there are jobs pending, queue this one and execute the next one
+
+        queueJob(method, onTop, data);
+        nextJob(worker);
+
+    } else { // No idle workers, queue request
+
+        queueJob(method, onTop, data);
+
     }
 
 };
