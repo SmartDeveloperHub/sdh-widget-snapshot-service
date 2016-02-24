@@ -27,6 +27,7 @@ const net = require('net');
 const http = require('http');
 const fs = require('fs');
 const WorkerPool = require('./WorkerPool');
+const JobQueue = require('./JobQueue');
 const Config = require('./config');
 
 var PORT_SEARCH_BEGIN = Config.phantom.start_port; //Number of port to start looking for free ports
@@ -35,7 +36,7 @@ var NUMBER_WORKERS = Config.phantom.workers;
 var NUMBER_EXECUTORS_PER_WORKER = Config.phantom.executors_per_worker;
 
 var workerPool = null;
-var jobQueue = [];
+var jobQueue = null;
 var app = express();
 
 var start = function() {
@@ -43,6 +44,9 @@ var start = function() {
     //First spawn the phantom processes that will serve the requests
     //Once all the workers are ready start the API service
     startPhantomWorkers( startApiService );
+
+    // Create a job queue using the worker pool that has been created
+    jobQueue = new JobQueue(workerPool);
 
 };
 
@@ -154,7 +158,7 @@ var handleImageGetRequest = function(req, res) {
         }
     };
 
-    executeOrQueueJob(makePhantomImageRequest, false, jobData);
+    jobQueue.executeOrQueueJob(makePhantomImageRequest, false, jobData);
 
 };
 
@@ -189,7 +193,7 @@ var handlePhantomImageResponse = function(worker, jobData, response) {
                 jobData.callback(response.statusCode, body);
 
                 // Start next job
-                nextJob();
+                jobQueue.nextJob();
 
             });
 
@@ -200,7 +204,7 @@ var handlePhantomImageResponse = function(worker, jobData, response) {
             console.error('The worker was not idle!!');
 
             // Try to reprocess it
-            executeOrQueueJob(makePhantomImageRequest, true, jobData);
+            jobQueue.executeOrQueueJob(makePhantomImageRequest, true, jobData);
 
             break;
 
@@ -213,7 +217,7 @@ var handlePhantomImageResponse = function(worker, jobData, response) {
                 jobData.callback(response.statusCode, body);
 
                 //Start next job
-                nextJob();
+                jobQueue.nextJob();
 
             });
 
@@ -232,54 +236,6 @@ var readResponseBody = function(response, callback) {
     response.on('end', function() {
         callback(body);
     });
-
-};
-
-var queueJob = function(method, onTop, data) {
-
-    // If it has priority, put it at the beginning of the queue
-    if(onTop) {
-        jobQueue.unshift({
-            data: data,
-            method: method
-        });
-
-    } else {
-        jobQueue.push({
-            data: data,
-            method: method
-        });
-    }
-};
-
-var nextJob = function(worker) {
-
-    var job = jobQueue.shift();
-
-    if(job != null) {
-        job.method(worker, job.data);
-    }
-
-};
-
-var executeOrQueueJob = function(method, onTop, data) {
-
-    //Select the worker that will handle this request
-    var worker = workerPool.getIdleAndAddJob();
-
-    if(worker != null && jobQueue.length === 0) { //If an idle worker is found and this is the only job
-        method(worker, data);
-
-    }else if(worker != null) { // If there are jobs pending, queue this one and execute the next one
-
-        queueJob(method, onTop, data);
-        nextJob(worker);
-
-    } else { // No idle workers, queue request
-
-        queueJob(method, onTop, data);
-
-    }
 
 };
 
