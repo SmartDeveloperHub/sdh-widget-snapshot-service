@@ -227,7 +227,7 @@ var handleGetImage = function(request, response, requestUrlInfo) {
         //If viewport is not set, set the default values
         viewport = {};
         viewport.height = requestUrlInfo.params['height'] || configuration['height'] || 450;
-        viewport.width = requestUrlInfo.params['width'] || 450;
+        viewport.width = requestUrlInfo.params['width'] || configuration['width'] || 450;
 
         if(configuration.height == null) {
             configuration.height = viewport.height;
@@ -280,13 +280,15 @@ var parseUrl = function(url) {
         host: parser.host     // => "example.com:3000"
     };
 
-    res.params = [];
+    res.params = {};
 
-    var paramstr = res.search.split('?')[1];
-    var paramsarr = paramstr.split('&');
-    for (var i = 0; i < paramsarr.length; i++) {
-        var tmparr = paramsarr[i].split('=');
-        res.params[decodeURIComponent(tmparr[0])] = decodeURIComponent(tmparr[1]);
+    if(res.search.length > 1) {
+        var paramstr = res.search.split('?')[1];
+        var paramsarr = paramstr.split('&');
+        for (var i = 0; i < paramsarr.length; i++) {
+            var tmparr = paramsarr[i].split('=');
+            res.params[decodeURIComponent(tmparr[0])] = decodeURIComponent(tmparr[1]);
+        }
     }
 
     return res;
