@@ -190,6 +190,7 @@ var chartDeleteWebFunction = function() {
 var chartCreateWebFunction = function(chartType, metrics, config, timeout) {
 
     //TODO: allow functions in config??
+    //TODO: improve function detection (with/without spaces, with/without name, etc)
     for(var param in config) {
         var val = config[param];
         if(typeof val === 'string' && val.indexOf('function (') === 0) {

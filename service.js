@@ -30,6 +30,7 @@ const WorkerPool = require('./WorkerPool');
 const JobQueue = require('./JobQueue');
 const config = require('./config');
 const uuid = require('node-uuid');
+const Redis = require('redis');
 
 var PORT_SEARCH_BEGIN = config.phantom.start_port; //Number of port to start looking for free ports
 var LISTEN_PORT = config.port;
@@ -39,19 +40,32 @@ var NUMBER_EXECUTORS_PER_WORKER = config.phantom.executors_per_worker;
 var workerPool = null;
 var jobQueue = null;
 var app = express();
+var redis = null;
+var freeingStorageSpace = false;
 
 var start = function() {
 
-    // First spawn the phantom processes that will serve the requests
-    startPhantomWorkers( function() {
+    redis = Redis.createClient(config.persistence.redis.port, config.persistence.redis.host);
 
-        // Create a job queue using the worker pool that has been created
-        jobQueue = new JobQueue(workerPool);
+    redis.on('connect', function() {
 
-        // Once all the workers are ready start the API service
-        startApiService();
+        // First spawn the phantom processes that will serve the requests
+        startPhantomWorkers( function() {
 
-    } );
+            // Create a job queue using the worker pool that has been created
+            jobQueue = new JobQueue(workerPool);
+
+            // Once all the workers are ready start the API service
+            startApiService();
+
+        } );
+
+    });
+
+    redis.on("error", function (err){
+        console.log("Error " + err);
+    });
+
 
 };
 
@@ -149,9 +163,10 @@ var handleImageCreateJobPostRequest = function(req, res) {
 
                     //TODO: return an url to retrieve the generated image
                     var fileId = uuid.v4();
+                    var fileName = config.persistence.prefix + fileId + ".png";
                     var newFilePath = path.join(
                         config.persistence.directory,
-                        config.persistence.prefix + fileId + ".png"
+                        fileName
                     );
 
                     //TODO: implement max size of files directory
@@ -160,11 +175,37 @@ var handleImageCreateJobPostRequest = function(req, res) {
                     fs.rename(body, newFilePath, function(err) {
 
                         if (err) {
-                            console.log("Error moving " + body + " to " + newFilePath, err);
+                            console.error("Error moving " + body + " to " + newFilePath, err);
+                            error(err, res, 500);
                             fs.unlink(body); //Remove the temporal file
-                            res.status(500).end();
+
                         } else {
                             res.location(req.protocol + '://' + req.get('host') + '/job/image/' + fileId).end();
+
+                            // Obtain the information about the file
+                            fs.stat(newFilePath, function(err, stats) {
+
+                                // Save the file information in redis
+                                redis.hmset(fileId, {
+                                    'name': fileName,
+                                    'size': stats.size,
+                                    'creation': new Date().getTime(),
+                                    'lastAccess': new Date().getTime()
+                                });
+
+                                redis.sadd('fileIds', fileId);
+
+                                // Increment the total space used
+                                redis.incrby('totalSpace', stats.size, function(err, total) {
+                                    if (err) return console.error(err);
+
+                                    if(total > config.persistence.max_size) {
+                                        freeStorageSpace();
+                                    }
+                                });
+
+                            });
+
                         }
 
                     });
@@ -193,20 +234,33 @@ var handleImageCreateJobPostRequest = function(req, res) {
 
 var handleImageJobGetRequest = function(req, res) {
 
+    var fileId = req.params.id;
 
-    //TODO: check security
-    var filePath = path.join(
-        config.persistence.directory,
-        config.persistence.prefix + req.params.id + ".png"
-    );
+    redis.hgetall(fileId, function(err, object) {
 
-    res.sendFile(filePath, function (err) {
-
-        if (err) {
-            console.log(err);
-            res.status(404).end();
+        if(err || object == null) {
+            error(err, res, 404);
+            return;
         }
+
+        var filePath = path.join(
+            config.persistence.directory,
+            object.name
+        );
+
+        redis.hset(fileId, 'lastAccess', new Date().getTime());
+
+        res.sendFile(filePath, function (err) {
+
+            if (err) {
+                error(err, res, 404);
+            }
+        });
+
     });
+
+
+
 
 };
 
@@ -222,8 +276,7 @@ var handleImageGetRequest = function(req, res) {
                     res.sendFile(body, function (err) {
 
                         if (err) {
-                            console.log(err);
-                            res.status(500).end();
+                            error(err, res, 500);
                         } else {
                             fs.unlink(body); //Remove the temporal file
                         }
@@ -341,6 +394,65 @@ function getPort (cb) {
     server.on('error', function (err) {
         getPort(cb)
     })
+}
+
+function error(err, res, status, msg) {
+    console.error(err);
+    if(msg) {
+        res.status(status).send(msg);
+    } else {
+        res.status(status).end();
+    }
+
+}
+
+function freeStorageSpace() {
+
+    if(!freeingStorageSpace) {
+        freeingStorageSpace = true;
+
+        redis.get("totalSpace", function(err, val) {
+
+            if(err) {
+                freeingStorageSpace = false;
+                return console.error(err);
+            }
+
+            var currentSize = parseInt(val);
+
+            var amountToFree = currentSize - (config.persistence.max_size * config.persistence.free_percentage / 100);
+            var freedAmount = 0;
+            //TODO: make sure the space is decremented before freeingStorageSpace is set to false
+
+            redis.sort("fileIds", 'by', "*->lastAccess", 'get', '#', 'get', '*->size', 'get', '*->name', 'LIMIT', "0", "30", function(err, result) {
+                for(var i = 0; i < result.length && freedAmount < amountToFree; i+=3) {
+                    var id = result[i];
+                    var size = parseInt(result[i+1]);
+                    var name = result[i+2];
+
+                    redis.del(id);
+                    redis.srem('fileIds', id);
+                    redis.decrby('totalSpace', size);
+
+                    var filePath = path.join(
+                        config.persistence.directory,
+                        name
+                    );
+
+                    fs.unlink(filePath);
+
+                    freedAmount += size;
+
+                }
+
+                freeingStorageSpace = false;
+            });
+
+        });
+
+
+    }
+
 }
 
 start();
