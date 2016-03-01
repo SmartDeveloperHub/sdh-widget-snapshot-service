@@ -128,7 +128,17 @@ var frameworkInitializationWebFunction = function(widgets) {
     require(widgets, function() {
 
         window.framework.ready(function() {
-            Bridge.sendToPhantom("frameworkReady", {success: true});
+
+            require(["sandbox"], function() { //Load the sandbox
+
+                window.framework.ready(function() {
+                    Bridge.sendToPhantom("frameworkReady", {success: true});
+                });
+
+            }, function (err) {
+                Bridge.sendToPhantom("frameworkReady", {success: false, error: err});
+            });
+
         });
 
     }, function (err) {
@@ -149,7 +159,7 @@ var onFrameworkReady = function(data) {
         this.onReadyCallback(true);
 
     } else {
-        console.error("Error in framework initialization!", data.error);
+        console.error("Error in framework initialization!", JSON.stringify(data.error));
         this.onReadyCallback(false);
     }
 

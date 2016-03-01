@@ -191,10 +191,11 @@ var chartCreateWebFunction = function(chartType, metrics, config, timeout) {
 
     //TODO: allow functions in config??
     //TODO: improve function detection (with/without spaces, with/without name, etc)
+
     for(var param in config) {
         var val = config[param];
         if(typeof val === 'string' && val.indexOf('function (') === 0) {
-            config[param] = eval('('+val+')');
+            config[param] = createSandboxedFuntion(val)();
         }
     }
 
