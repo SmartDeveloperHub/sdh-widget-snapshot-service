@@ -69,6 +69,8 @@ Bridge.prototype = {
                 this.destroy();
 
                 onReady(false);
+            } else {
+                this.page.navigationLocked = true; //Security: do not allow changes in location
             }
         }.bind(this));
 

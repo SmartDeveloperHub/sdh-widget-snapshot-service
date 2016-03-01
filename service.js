@@ -253,7 +253,7 @@ var handleImageJobGetRequest = function(req, res) {
         res.sendFile(filePath, function (err) {
 
             if (err) {
-                error(err, res, 404);
+                error(err, res, 410);
             }
         });
 
