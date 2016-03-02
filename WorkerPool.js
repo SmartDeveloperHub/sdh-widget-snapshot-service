@@ -21,8 +21,7 @@
 
 "use strict";
 
-function WorkerPool (jobsPerWorker) {
-    this.jobsPerWorker = jobsPerWorker || 1;
+function WorkerPool () {
     this.busy = [];
     this.idle = [];
 }
@@ -31,10 +30,7 @@ WorkerPool.prototype = {
     constructor: WorkerPool,
 
     add: function(worker) {
-        this.idle.push({
-            worker: worker,
-            jobs: 0
-        });
+        this.idle.push(worker);
     },
 
     allBusy: function() {
@@ -48,12 +44,13 @@ WorkerPool.prototype = {
     getIdleAndAddJob: function() {
         var worker = this.idle.shift();
         if(worker != null) {
-            if(++worker.jobs < this.jobsPerWorker) { //Not all concurrent jobs reached so add it to the end of idle queue
+            worker.incrementJobCount();
+            if(!worker.isCompletellyBusy()) { //Not all concurrent jobs reached so add it to the end of idle queue
                 this.idle.push(worker);
             } else { // All concurrent jobs reached so add it to the busy queue
                 this.busy.push(worker);
             }
-            return worker.worker;
+            return worker;
         }
 
         return null; //Null in case there are no idle workers
@@ -62,37 +59,24 @@ WorkerPool.prototype = {
 
     setIdle: function(worker) {
 
-        var index = indexOfWorkerInList(worker, this.idle);
+        var index = this.idle.indexOf(worker);
 
         if(index >= 0) { //It is in the idle queue
-            this.idle[index]['jobs']--;
+            this.idle[index].decrementJobCount();
 
         } else { //Try to find it in the busy queue
 
-            index = indexOfWorkerInList(worker, this.busy);
+            index = this.busy.indexOf(worker);
 
             if(index != -1) {
-                this.busy[index]['jobs']--;
+                this.busy[index].decrementJobCount();
                 this.idle.push(this.busy.splice(index, 1)[0]);
             } else {
                 throw new Error("Worker could not be found!");
             }
         }
 
-    },
-
-    isBusy: function(worker) {
-        return indexOfWorkerInList(worker, this.busy) !== -1;
     }
-};
-
-var indexOfWorkerInList = function(worker, list) {
-    for(var i = 0; i < list.length; i++) {
-        if(list[i].worker === worker) {
-            return i;
-        }
-    }
-    return -1;
 };
 
 module.exports = WorkerPool;

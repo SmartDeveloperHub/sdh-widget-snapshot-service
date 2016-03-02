@@ -30,6 +30,7 @@ function WidgetSnapshotProvider (id, timeout) {
     this.isReady = false;
     this.bridge = null;
     this.currentJob = null;
+    this.currentJobs = 0;
 }
 
 WidgetSnapshotProvider.prototype = {
@@ -108,6 +109,29 @@ WidgetSnapshotProvider.prototype = {
 
     , msg: function(txt) {
         return 'WidgetSnapshotProvider('+this.id+') ' + txt;
+    },
+
+    kill: function () {
+        this.destroy();
+        this.currentJobs = 0;
+    },
+
+    decrementJobCount: function() {
+        if(this.currentJobs > 0) {
+            this.currentJobs--;
+        }
+    },
+
+    incrementJobCount: function() {
+        if(this.currentJobs < 1) {
+            this.currentJobs = 1;
+        } else {
+            throw new Error("This worker has reached the maximum of jobs");
+        }
+    },
+
+    isCompletellyBusy: function() {
+        return this.currentJobs === 1;
     }
 
 };

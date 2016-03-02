@@ -65,7 +65,7 @@ var main = function() {
     }
 
     //Create a pool of workers
-    workerPool = new WorkerPool(1);
+    workerPool = new WorkerPool();
 
     // Fill the pool with workers
     var startedCount = 0;

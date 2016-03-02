@@ -27,6 +27,7 @@ const net = require('net');
 const http = require('http');
 const fs = require('fs');
 const WorkerPool = require('./WorkerPool');
+const PhantomWorker = require('./PhantomWorker');
 const JobQueue = require('./JobQueue');
 const config = require('./config');
 const uuid = require('node-uuid');
@@ -75,7 +76,7 @@ var startPhantomWorkers = function(callback) {
     var phantomJsExecutable = phantomjs.path;
 
     var workersReady = 0;
-    workerPool = new WorkerPool(NUMBER_EXECUTORS_PER_WORKER);
+    workerPool = new WorkerPool();
 
     var launchWorker = function() {
 
@@ -92,18 +93,7 @@ var startPhantomWorkers = function(callback) {
             var proc = childProcess.execFile(phantomJsExecutable, childArgs);
             //TODO: handle case in which a worker dies
 
-            proc.stdout.on('data', function(data) {
-                    console.log("[PhantomService]["+port+"]: " + data);
-            });
-
-            proc.stderr.on('data', function(data) {
-                console.error("[PhantomService]["+port+"]: " + data);
-            });
-
-            workerPool.add({
-                process: proc,
-                port: port
-            });
+            workerPool.add(new PhantomWorker(proc, port, NUMBER_EXECUTORS_PER_WORKER));
 
             if(++workersReady === NUMBER_WORKERS) {
                 callback();
