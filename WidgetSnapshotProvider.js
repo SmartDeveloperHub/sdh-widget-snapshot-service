@@ -31,6 +31,7 @@ function WidgetSnapshotProvider (id, timeout) {
     this.bridge = null;
     this.currentJob = null;
     this.currentJobs = 0;
+    this.timeoutId = null;
 }
 
 WidgetSnapshotProvider.prototype = {
@@ -136,30 +137,36 @@ WidgetSnapshotProvider.prototype = {
 
 };
 
+var processChartReadyEvent = function() {
+
+    if(this.currentJob == null) {
+        console.warn(this.msg("A job in the WidgetSnapshotProvider was lost!!!"));
+    }
+
+    if(this.timeoutId != null) {
+        clearTimeout(this.timeoutId);
+        this.timeoutId = null;
+    }
+
+    var fileName = '/tmp/' + Math.round(Math.random() * 1000000000) + ".png"; //TODO: compatibility with Windows?
+    var success = this.bridge.getPage().render(fileName);
+
+    //Clear the chart
+    this.bridge.getPage().evaluate(chartDeleteWebFunction);
+
+    // Clear the current job information
+    var onImageReady = this.currentJob.onImageReady;
+    this.currentJob = null;
+
+    // Execute the callback
+    onImageReady(success ? fileName : undefined);
+
+};
 
 var processDataReceivedEvent = function() {
-
-    setTimeout(function() { //TODO: detect if the image has been rendered
-
-        if(this.currentJob == null) {
-            console.warn(this.msg("A job in the WidgetSnapshotProvider was lost!!!"));
-        }
-
-        var fileName = '/tmp/' + Math.round(Math.random() * 1000000000) + ".png"; //TODO: compatibility with Windows?
-        var success = this.bridge.getPage().render(fileName);
-
-        //Clear the chart
-        this.bridge.getPage().evaluate(chartDeleteWebFunction);
-
-        // Clear the current job information
-        var onImageReady = this.currentJob.onImageReady;
-        this.currentJob = null;
-
-        // Execute the callback
-        onImageReady(success ? fileName : undefined);
-
-    }.bind(this), 500);
-
+    if(this.currentJob != null) {
+        this.timeoutId = setTimeout(processChartReadyEvent.bind(this), 500);
+    }
 };
 
 var processErrorEvent = function(msg) {
@@ -183,6 +190,7 @@ var processErrorEvent = function(msg) {
 var phantomWebMessageHandler = function(data) {
     switch (data.type) {
         case 'DATA_RECEIVED': processDataReceivedEvent.call(this); break;
+        case 'CHART_READY': processChartReadyEvent.call(this); break;
         case 'ERROR': processErrorEvent.call(this, data.data); break;
         default:
             console.warn(this.msg("Received unknown type in phantomWebMessageHandler!"));
@@ -215,6 +223,18 @@ var chartCreateWebFunction = function(chartType, metrics, config, timeout) {
 
     //TODO: allow functions in config??
     //TODO: improve function detection (with/without spaces, with/without name, etc)
+
+    //For nvd3: overwrite the addGraph method to make sure that the CHART_READY event is triggered
+    if(nv != null) {
+        window._addGraph = window._addGraph || nv.addGraph;
+        nv.addGraph = function(generator, callback) {
+            window._addGraph(generator, function(c) {
+                flushAnimationFrames();
+                Bridge.sendToPhantom("CHART_READY", null);
+                if (typeof callback === 'function') callback(c);
+            })
+        };
+    }
 
     for(var param in config) {
         var val = config[param];
