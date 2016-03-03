@@ -223,6 +223,18 @@ var chartCreateWebFunction = function(chartType, metrics, config, timeout) {
         }
     }
 
+    for(var i = 0; i < metrics.length; i++) {
+        var metric = metrics[i];
+        if(metric instanceof Object) {
+            for(var param in metric) {
+                var val = metric[param];
+                if(typeof val === 'string' && val.indexOf('function (') === 0) {
+                    metric[param] = createSandboxedFuntion(val)();
+                }
+            }
+        }
+    }
+
     $("body").append("<div id='chart' style='width: 100%; height: 100%;'></div>");
 
     var domElement = document.getElementById("chart");
