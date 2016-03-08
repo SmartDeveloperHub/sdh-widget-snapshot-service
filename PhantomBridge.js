@@ -23,6 +23,7 @@
 
 function Bridge (id) {
     this.id = id;
+    this.api_url = null;
     this.page = null;
     this.onReadyCallback = null;
     this.externalMessageHandler = null;
@@ -38,7 +39,7 @@ Bridge.prototype = {
      * Initialize.
      * @param onReady
      */
-    , initFramework: function(widgetList, externalMessageHandler, onReady) {
+    , initFramework: function(widgetList, api_url, externalMessageHandler, onReady) {
 
         if(!(widgetList instanceof Array)) {
             throw new Error(this.msg('The widgetList parameter must contain a list of objects {path: "path_to_widget", name: "name"}.'));
@@ -49,6 +50,7 @@ Bridge.prototype = {
         }
 
         this.widgetList = widgetList;
+        this.api_url = api_url;
         this.onReadyCallback = onReady;
         this.externalMessageHandler = externalMessageHandler;
 
@@ -119,7 +121,9 @@ var messageHandler = function(data) {
     }
 };
 
-var frameworkInitializationWebFunction = function(widgets) {
+var frameworkInitializationWebFunction = function(widgets, api_url) {
+
+    window.SDH_API_URL = api_url;
 
     $(window).on("FRAMEWORK_INITIALIZATION_ERROR", function(event, d) {
         Bridge.sendToPhantom("frameworkReady", {success: false, error: d});
@@ -168,7 +172,7 @@ var onFrameworkReady = function(data) {
 var onRequireJsReady = function(data) {
 
     if(data.success) {
-        this.page.evaluate(frameworkInitializationWebFunction, this.widgetList);
+        this.page.evaluate(frameworkInitializationWebFunction, this.widgetList, this.api_url);
     } else {
         console.error("Error in requireJs initialization!", data.error);
         this.onReadyCallback(false);

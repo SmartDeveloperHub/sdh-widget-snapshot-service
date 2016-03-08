@@ -41,14 +41,14 @@ WidgetSnapshotProvider.prototype = {
      * Initialize the web capturer.
      * @param onReady
      */
-    , init: function(requireJsWidgetList, onReady) {
+    , init: function(requireJsWidgetList, api_url, onReady) {
 
         if(typeof onReady !== 'function') {
             throw new Error(this.msg('A callback function must be specified in "init" method.'));
         }
 
         this.bridge = new Bridge(this.id);
-        this.bridge.initFramework(requireJsWidgetList, phantomWebMessageHandler.bind(this), onReady);
+        this.bridge.initFramework(requireJsWidgetList, api_url, phantomWebMessageHandler.bind(this), onReady);
 
 
     }

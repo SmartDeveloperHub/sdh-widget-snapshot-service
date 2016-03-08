@@ -71,7 +71,7 @@ var main = function() {
     var startedCount = 0;
     for(var i = 0; i < NUMBER_WORKERS; i++) {
         var snapshotProvider = new WidgetSnapshotProvider(i, TIMEOUT);
-        snapshotProvider.init(requireJsWidgetList, function(snapshotProvider, success) {
+        snapshotProvider.init(requireJsWidgetList, config.api.url, function(snapshotProvider, success) {
 
             if(!success) {
                 console.error("Unable to init WidgetSnapshotProvider");

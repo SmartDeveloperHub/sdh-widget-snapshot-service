@@ -19,4 +19,7 @@ config.phantom.executors_per_worker = 1; // Number of executors (something like 
 config.phantom.start_port = 45032; // The port in which it will start lookin for available ports to assign to each worker
 config.phantom.timeout = 20000; // Timeout in milliseconds per execution in the "browser"
 
+config.api = {};
+config.api.url = "http://localhost:8080";
+
 module.exports = config;
