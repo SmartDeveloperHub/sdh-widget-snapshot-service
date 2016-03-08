@@ -119,8 +119,8 @@ var startApiService = function() {
 
     // Endpoints
     app.get('/image', handleImageGetRequest);
-    app.post('/job/image', handleImageCreateJobPostRequest);
-    app.get('/job/image/:id', handleImageJobGetRequest);
+    app.post('/persistent-image', handlePersistentImagePostRequest);
+    app.get('/persistent-image/:id', handlePersistentImageGetRequest);
 
     // Start listening for requests
     app.listen(LISTEN_PORT, function () {
@@ -129,7 +129,7 @@ var startApiService = function() {
 
 };
 
-var handleImageCreateJobPostRequest = function(req, res) {
+var handlePersistentImagePostRequest = function(req, res) {
 
     var phantomServiceUrl = "/image" +
         "?chart=" + encodeURIComponent(req.body.chart) +
@@ -170,7 +170,7 @@ var handleImageCreateJobPostRequest = function(req, res) {
                             fs.unlink(body); //Remove the temporal file
 
                         } else {
-                            res.location(req.protocol + '://' + req.get('host') + '/job/image/' + fileId).end();
+                            res.location(req.protocol + '://' + req.get('host') + '/persistent-image/' + fileId).end();
 
                             // Obtain the information about the file
                             fs.stat(newFilePath, function(err, stats) {
@@ -222,7 +222,7 @@ var handleImageCreateJobPostRequest = function(req, res) {
 };
 
 
-var handleImageJobGetRequest = function(req, res) {
+var handlePersistentImageGetRequest = function(req, res) {
 
     var fileId = req.params.id;
 
