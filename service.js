@@ -136,12 +136,12 @@ var handlePersistentImagePostRequest = function(req, res) {
         "&metrics=" + encodeURIComponent(JSON.stringify(req.body.metrics)) +
         "&configuration=" + encodeURIComponent(JSON.stringify(req.body.configuration));
 
-    if(req.body.height && !Number.isNaN(Number.parseFloat(req.body.height))) {
-        phantomServiceUrl += "&height="+encodeURIComponent(Number.parseFloat(req.body.height));
+    if(req.body.height && !Number.isNaN(parseFloat(req.body.height))) {
+        phantomServiceUrl += "&height="+encodeURIComponent(parseFloat(req.body.height));
     }
 
-    if(req.body.width && !Number.isNaN(Number.parseFloat(req.body.width))) {
-        phantomServiceUrl += "&width="+encodeURIComponent(Number.parseFloat(req.body.width));
+    if(req.body.width && !Number.isNaN(parseFloat(req.body.width))) {
+        phantomServiceUrl += "&width="+encodeURIComponent(parseFloat(req.body.width));
     }
 
     var jobData = {
