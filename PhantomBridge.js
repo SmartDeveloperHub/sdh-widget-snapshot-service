@@ -129,25 +129,30 @@ var frameworkInitializationWebFunction = function(widgets, api_url) {
         Bridge.sendToPhantom("frameworkReady", {success: false, error: d});
     });
 
-    require(widgets, function() {
+    var onRequireJsError = function (err) {
+        Bridge.sendToPhantom("frameworkReady", {success: false, error: err});
+    };
 
-        window.framework.ready(function() {
+    require(["optimizations"], function() { //Load the optimizations before the framework
 
-            require(["sandbox", "utils"], function() { //Load the sandbox
+        require(widgets, function() {
 
-                window.framework.ready(function() {
-                    Bridge.sendToPhantom("frameworkReady", {success: true});
-                });
+            window.framework.ready(function() {
 
-            }, function (err) {
-                Bridge.sendToPhantom("frameworkReady", {success: false, error: err});
+                require(["sandbox", "utils"], function() { //Load the sandbox
+
+                    window.framework.ready(function() {
+                        Bridge.sendToPhantom("frameworkReady", {success: true});
+                    });
+
+                }, onRequireJsError);
+
             });
 
-        });
+        }, onRequireJsError);
 
-    }, function (err) {
-        Bridge.sendToPhantom("frameworkReady", {success: false, error: err});
-    });
+    }, onRequireJsError);
+
 
 };
 

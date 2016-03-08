@@ -18,11 +18,24 @@
       limitations under the License.
     #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=#
 */
+
 (function() {
 
-    window.isAFunctionString = function(string) {
-        var func_regex = /^\s*function\s*([a-zA-Z_$][0-9a-zA-Z_$]*\s*)?\(/;
-        return func_regex.test(string);
+    var callbacks = [];
+
+    window.requestAnimationFrame = function(callback) {
+        callbacks.push(callback);
+    };
+
+    window.flushAnimationFrames = function() {
+        var now = Date.now;
+        Date.now = function() { return Infinity; };
+        var nc = callbacks.length;
+        for(var ci = 0; ci < nc; ci++) {
+            var callback = callbacks.shift();
+            try { callback(); } catch (e) { console.error(e); }
+        }
+        Date.now = now;
     };
 
 })();
