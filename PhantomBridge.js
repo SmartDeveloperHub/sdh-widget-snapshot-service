@@ -129,7 +129,7 @@ var frameworkInitializationWebFunction = function(widgets) {
 
         window.framework.ready(function() {
 
-            require(["sandbox"], function() { //Load the sandbox
+            require(["sandbox", "utils"], function() { //Load the sandbox
 
                 window.framework.ready(function() {
                     Bridge.sendToPhantom("frameworkReady", {success: true});

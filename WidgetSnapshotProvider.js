@@ -238,7 +238,7 @@ var chartCreateWebFunction = function(chartType, metrics, config, timeout) {
 
     for(var param in config) {
         var val = config[param];
-        if(typeof val === 'string' && val.indexOf('function (') === 0) {
+        if(typeof val === 'string' && isAFunctionString(val)) {
             config[param] = createSandboxedFuntion(val)();
         }
     }
@@ -248,7 +248,7 @@ var chartCreateWebFunction = function(chartType, metrics, config, timeout) {
         if(metric instanceof Object) {
             for(var param in metric) {
                 var val = metric[param];
-                if(typeof val === 'string' && val.indexOf('function (') === 0) {
+                if(typeof val === 'string' && isAFunctionString(val)) {
                     metric[param] = createSandboxedFuntion(val)();
                 }
             }

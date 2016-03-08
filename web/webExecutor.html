@@ -10,23 +10,6 @@
         </script>
         <script src="vendor/requirejs/require.js"></script>
         <script>
-            var callbacks = [];
-
-            requestAnimationFrame = function(callback) {
-                callbacks.push(callback);
-            };
-
-            flushAnimationFrames = function() {
-                var now = Date.now;
-                Date.now = function() { return Infinity; };
-                var nc = callbacks.length;
-                for(var ci = 0; ci < nc; ci++) {
-                    var callback = callbacks.shift();
-                    try { callback(); } catch (e) { console.error(e); }
-                }
-                Date.now = now;
-            };
-
             var chart; //Variable that will contain the object of the current chart
             require(['require-config.js'], function() {
 
