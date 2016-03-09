@@ -29,6 +29,7 @@ const fs = require('fs');
 const WorkerPool = require('./WorkerPool');
 const PhantomWorker = require('./PhantomWorker');
 const JobQueue = require('./JobQueue');
+const JobStatusController = require('./JobStatusController');
 const config = require('./config');
 const uuid = require('node-uuid');
 const Redis = require('redis');
@@ -43,6 +44,7 @@ var jobQueue = null;
 var app = express();
 var redis = null;
 var freeingStorageSpace = false;
+var jobStatusController = new JobStatusController();
 
 var start = function() {
 
