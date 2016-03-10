@@ -228,19 +228,22 @@ var handlePersistentImageGetRequest = function(req, res) {
 
     var fileId = req.params.id;
 
-    redis.hgetall(fileId, function(err, object) {
+    redis.hgetall(fileId, function(err, fileInfo) {
 
-        if(err || object == null) {
+        if(err || fileInfo == null) {
             error(err, res, 404);
             return;
         }
 
         var filePath = path.join(
             config.persistence.directory,
-            object.name
+            fileInfo.name
         );
 
         redis.hset(fileId, 'lastAccess', new Date().getTime());
+
+        // Set information about when this imae was created
+        res.header("Last-Modified", new Date(parseInt(fileInfo.creation)).toUTCString());
 
         res.sendFile(filePath, function (err) {
 
