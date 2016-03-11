@@ -19,16 +19,11 @@
     #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=#
 */
 
-const fs = require('fs');
-const net = require('net');
 const http = require('http');
-const uuid = require('node-uuid');
-const path = require('path');
-const config = require('./config');
+const PersistenceController = require('./PersistenceController');
+const fs = require('fs');
 
 var app = require('express')();
-
-var freeingStorageSpace = false;
 
 var start = function(listen_port) {
 
@@ -71,49 +66,14 @@ var handlePersistentImagePostRequest = function(req, res) {
             switch(statusCode) {
                 case 200:
 
-                    var fileId = uuid.v4();
-                    var fileName = config.persistence.prefix + fileId + ".png";
-                    var newFilePath = path.join(
-                        config.persistence.directory,
-                        fileName
-                    );
-
-                    fs.rename(body, newFilePath, function(err) {
-
+                    PersistenceController.persistFile(body, function(err, fileId) {
                         if (err) {
                             console.error("Error moving " + body + " to " + newFilePath, err);
                             error(err, res, 500);
                             fs.unlink(body); //Remove the temporal file
-
                         } else {
                             res.location(req.protocol + '://' + req.get('host') + '/persistent-image/' + fileId).end();
-
-                            // Obtain the information about the file
-                            fs.stat(newFilePath, function(err, stats) {
-
-                                // Save the file information in redis
-                                redis.hmset(fileId, {
-                                    'name': fileName,
-                                    'size': stats.size,
-                                    'creation': new Date().getTime(),
-                                    'lastAccess': new Date().getTime()
-                                });
-
-                                redis.sadd('fileIds', fileId);
-
-                                // Increment the total space used
-                                redis.incrby('totalSpace', stats.size, function(err, total) {
-                                    if (err) return console.error(err);
-
-                                    if(total > config.persistence.max_size) {
-                                        freeStorageSpace();
-                                    }
-                                });
-
-                            });
-
                         }
-
                     });
 
                     break;
@@ -142,23 +102,21 @@ var handlePersistentImageGetRequest = function(req, res) {
 
     var fileId = req.params.id;
 
-    redis.hgetall(fileId, function(err, fileInfo) {
+    PersistenceController.getPersistedFile(fileId, function(err, filePath, fileInfo) {
 
         if(err || fileInfo == null) {
             error(err, res, 404);
             return;
         }
 
-        var filePath = path.join(
-            config.persistence.directory,
-            fileInfo.name
-        );
-
-        redis.hset(fileId, 'lastAccess', new Date().getTime());
-
         // Set information about when this image was created
         res.header("Last-Modified", new Date(parseInt(fileInfo.creation)).toUTCString());
 
+        // Set the content type (this is needed because sendFile can not infer it because the file has no extension)
+        res.contentType(filePath);
+
+        // Send the file (this does not use the sendfile system call)
+        //TODO: improve send file performance using a serve static middleware
         res.sendFile(filePath, function (err) {
 
             if (err) {
@@ -167,9 +125,6 @@ var handlePersistentImageGetRequest = function(req, res) {
         });
 
     });
-
-
-
 
 };
 
@@ -295,56 +250,6 @@ function error(err, res, status, msg) {
         res.status(status).send(msg);
     } else {
         res.status(status).end();
-    }
-
-}
-
-//TODO: Refactor
-function freeStorageSpace() {
-
-    if(!freeingStorageSpace) {
-        freeingStorageSpace = true;
-
-        redis.get("totalSpace", function(err, val) {
-
-            if(err) {
-                freeingStorageSpace = false;
-                return console.error(err);
-            }
-
-            var currentSize = parseInt(val);
-
-            var amountToFree = currentSize - (config.persistence.max_size * config.persistence.free_percentage / 100);
-            var freedAmount = 0;
-            //TODO: make sure the space is decremented before freeingStorageSpace is set to false
-
-            redis.sort("fileIds", 'by', "*->lastAccess", 'get', '#', 'get', '*->size', 'get', '*->name', 'LIMIT', "0", "30", function(err, result) {
-                for(var i = 0; i < result.length && freedAmount < amountToFree; i+=3) {
-                    var id = result[i];
-                    var size = parseInt(result[i+1]);
-                    var name = result[i+2];
-
-                    redis.del(id);
-                    redis.srem('fileIds', id);
-                    redis.decrby('totalSpace', size);
-
-                    var filePath = path.join(
-                        config.persistence.directory,
-                        name
-                    );
-
-                    fs.unlink(filePath);
-
-                    freedAmount += size;
-
-                }
-
-                freeingStorageSpace = false;
-            });
-
-        });
-
-
     }
 
 }
