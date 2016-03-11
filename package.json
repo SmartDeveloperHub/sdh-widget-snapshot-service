@@ -38,6 +38,6 @@
   },
   "scripts": {
     "postinstall": "node node_modules/bower/bin/bower --allow-root --config.interactive=false install",
-    "start": "node service.js"
+    "start": "node node-service/service.js"
   }
 }

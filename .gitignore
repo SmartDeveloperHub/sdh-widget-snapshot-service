@@ -1,4 +1,4 @@
 /node_modules
 .idea/
-web/vendor
+phantomjs-service/web/vendor
 config.js

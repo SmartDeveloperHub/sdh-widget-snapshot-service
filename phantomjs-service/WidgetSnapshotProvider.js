@@ -138,7 +138,7 @@ WidgetSnapshotProvider.prototype = {
 };
 
 var processChartReadyEvent = function() {
-    console.log("processChartReadyEvent");
+
     if(this.currentJob == null) {
         console.warn(this.msg("A job in the WidgetSnapshotProvider was lost!!!"));
     }
@@ -165,7 +165,6 @@ var processChartReadyEvent = function() {
 
 var processDataReceivedEvent = function() {
     if(this.currentJob != null) {
-        console.log("processDataReceivedEvent");
         this.timeoutId = setTimeout(processChartReadyEvent.bind(this), 500);
     }
 };
@@ -237,12 +236,12 @@ var chartCreateWebFunction = function(chartType, metrics, config, timeout) {
         };
     }
 
-    if(Chart != null) {
+    /*if(Chart != null) {
         Chart.defaults.global.animation = false;
         Chart.defaults.global.onAnimationComplete = function() {
             Bridge.sendToPhantom("CHART_READY", null);
         }
-    }
+    }*/
 
     for(var param in config) {
         var val = config[param];

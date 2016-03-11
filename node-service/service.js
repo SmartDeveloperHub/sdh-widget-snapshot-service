@@ -25,11 +25,11 @@ const childProcess = require('child_process');
 const phantomjs = require('phantomjs-prebuilt');
 const net = require('net');
 const fs = require('fs');
-const WorkerPool = require('./WorkerPool');
+const WorkerPool = require('./../common/WorkerPool');
 const PhantomWorker = require('./PhantomWorker');
 const JobQueue = require('./JobQueue');
 const JobStatusController = require('./JobStatusController');
-const config = require('./config');
+const config = require('./../config');
 const Redis = require('redis');
 const API = require('./API');
 
@@ -87,12 +87,16 @@ var startPhantomWorkers = function(callback) {
 
             var childArgs = [
                 "--web-security=false",
-                path.join(__dirname, 'PhantomService.js'),
+                path.join(__dirname, '..', 'phantomjs-service', 'phantomjs-service.js'),
                 port
             ];
 
+            var procOpts = {
+                cwd: path.join(__dirname, '..', 'phantomjs-service')
+            };
+
             // Spawn the worker process
-            var proc = childProcess.execFile(phantomJsExecutable, childArgs);
+            var proc = childProcess.execFile(phantomJsExecutable, childArgs, procOpts);
             //TODO: handle case in which a worker dies
 
             workerPool.add(new PhantomWorker(proc, port, NUMBER_EXECUTORS_PER_WORKER));

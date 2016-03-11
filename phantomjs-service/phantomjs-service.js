@@ -26,8 +26,8 @@ var webserver = require('webserver');
 var system = require('system');
 
 var WidgetSnapshotProvider = require('./WidgetSnapshotProvider');
-var WorkerPool = require('./WorkerPool');
-var config = require('./config.js');
+var WorkerPool = require('./../common/WorkerPool');
+var config = require('./../config.js');
 
 var workerPool = null;
 var widgets = null;
