@@ -19,32 +19,32 @@
     #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=#
 */
 
-const express = require('express');
+
 const path = require('path');
 const childProcess = require('child_process');
 const phantomjs = require('phantomjs-prebuilt');
 const net = require('net');
-const http = require('http');
 const fs = require('fs');
 const WorkerPool = require('./WorkerPool');
 const PhantomWorker = require('./PhantomWorker');
 const JobQueue = require('./JobQueue');
 const JobStatusController = require('./JobStatusController');
 const config = require('./config');
-const uuid = require('node-uuid');
 const Redis = require('redis');
+const API = require('./API');
 
 var PORT_SEARCH_BEGIN = config.phantom.start_port; //Number of port to start looking for free ports
 var LISTEN_PORT = config.port;
 var NUMBER_WORKERS = config.phantom.workers;
 var NUMBER_EXECUTORS_PER_WORKER = config.phantom.executors_per_worker;
 
-var workerPool = null;
-var jobQueue = null;
-var app = express();
-var redis = null;
-var freeingStorageSpace = false;
 var jobStatusController = new JobStatusController();
+
+// Globals
+global.redis = null;
+global.workerPool = null;
+global.jobQueue = null;
+
 
 var start = function() {
 
@@ -59,7 +59,7 @@ var start = function() {
             jobQueue = new JobQueue(workerPool);
 
             // Once all the workers are ready start the API service
-            startApiService();
+            API.start(LISTEN_PORT);
 
         } );
 
@@ -112,268 +112,7 @@ var startPhantomWorkers = function(callback) {
 
 };
 
-var startApiService = function() {
 
-    var bodyParser = require('body-parser');
-
-    // Configure express
-    app.use(bodyParser.json());       // to support JSON-encoded bodies
-
-    // Endpoints
-    app.get('/image', handleImageGetRequest);
-    app.post('/persistent-image', handlePersistentImagePostRequest);
-    app.get('/persistent-image/:id', handlePersistentImageGetRequest);
-
-    // Start listening for requests
-    app.listen(LISTEN_PORT, function () {
-        console.log('Service is now listening on port '+LISTEN_PORT+'!');
-    });
-
-};
-
-var handlePersistentImagePostRequest = function(req, res) {
-
-    var phantomServiceUrl = "/image" +
-        "?chart=" + encodeURIComponent(req.body.chart) +
-        "&metrics=" + encodeURIComponent(JSON.stringify(req.body.metrics)) +
-        "&configuration=" + encodeURIComponent(JSON.stringify(req.body.configuration));
-
-    if(req.body.height && !Number.isNaN(parseFloat(req.body.height))) {
-        phantomServiceUrl += "&height="+encodeURIComponent(parseFloat(req.body.height));
-    }
-
-    if(req.body.width && !Number.isNaN(parseFloat(req.body.width))) {
-        phantomServiceUrl += "&width="+encodeURIComponent(parseFloat(req.body.width));
-    }
-
-    var jobData = {
-        imageUrl: phantomServiceUrl,
-        callback: function(statusCode, body) {
-
-            switch(statusCode) {
-                case 200:
-
-                    //TODO: return an url to retrieve the generated image
-                    var fileId = uuid.v4();
-                    var fileName = config.persistence.prefix + fileId + ".png";
-                    var newFilePath = path.join(
-                        config.persistence.directory,
-                        fileName
-                    );
-
-                    //TODO: implement max size of files directory
-                    //TODO: return information about the creation date
-
-                    fs.rename(body, newFilePath, function(err) {
-
-                        if (err) {
-                            console.error("Error moving " + body + " to " + newFilePath, err);
-                            error(err, res, 500);
-                            fs.unlink(body); //Remove the temporal file
-
-                        } else {
-                            res.location(req.protocol + '://' + req.get('host') + '/persistent-image/' + fileId).end();
-
-                            // Obtain the information about the file
-                            fs.stat(newFilePath, function(err, stats) {
-
-                                // Save the file information in redis
-                                redis.hmset(fileId, {
-                                    'name': fileName,
-                                    'size': stats.size,
-                                    'creation': new Date().getTime(),
-                                    'lastAccess': new Date().getTime()
-                                });
-
-                                redis.sadd('fileIds', fileId);
-
-                                // Increment the total space used
-                                redis.incrby('totalSpace', stats.size, function(err, total) {
-                                    if (err) return console.error(err);
-
-                                    if(total > config.persistence.max_size) {
-                                        freeStorageSpace();
-                                    }
-                                });
-
-                            });
-
-                        }
-
-                    });
-
-                    break;
-
-                default:
-
-                    if(body.length > 0) {
-                        res.status(statusCode).send(body);
-                    } else {
-                        res.status(statusCode).end();
-                    }
-
-                    break;
-
-            }
-
-        }
-    };
-
-    jobQueue.executeOrQueueJob(makePhantomImageRequest, false, jobData);
-
-};
-
-
-var handlePersistentImageGetRequest = function(req, res) {
-
-    var fileId = req.params.id;
-
-    redis.hgetall(fileId, function(err, fileInfo) {
-
-        if(err || fileInfo == null) {
-            error(err, res, 404);
-            return;
-        }
-
-        var filePath = path.join(
-            config.persistence.directory,
-            fileInfo.name
-        );
-
-        redis.hset(fileId, 'lastAccess', new Date().getTime());
-
-        // Set information about when this imae was created
-        res.header("Last-Modified", new Date(parseInt(fileInfo.creation)).toUTCString());
-
-        res.sendFile(filePath, function (err) {
-
-            if (err) {
-                error(err, res, 410);
-            }
-        });
-
-    });
-
-
-
-
-};
-
-var handleImageGetRequest = function(req, res) {
-
-    var jobData = {
-        imageUrl: req.originalUrl,
-        callback: function(statusCode, body) {
-
-            switch(statusCode) {
-                case 200:
-
-                    res.sendFile(body, function (err) {
-
-                        if (err) {
-                            error(err, res, 500);
-                        } else {
-                            fs.unlink(body); //Remove the temporal file
-                        }
-                    });
-
-                    break;
-
-                default:
-
-                    if(body.length > 0) {
-                        res.status(statusCode).send(body);
-                    } else {
-                        res.status(statusCode).end();
-                    }
-
-                    break;
-
-            }
-
-        }
-    };
-
-    jobQueue.executeOrQueueJob(makePhantomImageRequest, false, jobData);
-
-};
-
-var makePhantomImageRequest = function(worker, jobData) {
-
-    console.log("Request:" + jobData.imageUrl);
-    console.log("Port: " + worker.port);
-
-    http.get(
-        {
-            hostname: '127.0.0.1',
-            port: worker.port,
-            path: jobData.imageUrl
-        },
-        handlePhantomImageResponse.bind(null, worker, jobData)
-    );
-
-};
-
-
-var handlePhantomImageResponse = function(worker, jobData, response) {
-
-    switch(response.statusCode) {
-
-        case 200: // Image was generated without errors
-
-            readResponseBody(response, function(body) {
-
-                // Mark the worker as idle
-                workerPool.setIdle(worker);
-
-                jobData.callback(response.statusCode, body);
-
-                // Start next job
-                jobQueue.nextJob();
-
-            });
-
-            break;
-
-        case 503: // This case should not happen as the service keeps to count of jobs per worker
-
-            console.error('The worker was not idle!!');
-
-            // Try to reprocess it
-            jobQueue.executeOrQueueJob(makePhantomImageRequest, true, jobData);
-
-            break;
-
-        default: // Some error happened
-
-            readResponseBody(response, function(body) {
-
-                workerPool.setIdle(worker);
-
-                jobData.callback(response.statusCode, body);
-
-                //Start next job
-                jobQueue.nextJob();
-
-            });
-
-            break;
-    }
-
-};
-
-var readResponseBody = function(response, callback) {
-
-    // Continuously update stream with data
-    var body = '';
-    response.on('data', function(d) {
-        body += d;
-    });
-    response.on('end', function() {
-        callback(body);
-    });
-
-};
 
 function getPort (cb) {
     var port = PORT_SEARCH_BEGIN;
@@ -391,63 +130,5 @@ function getPort (cb) {
     })
 }
 
-function error(err, res, status, msg) {
-    console.error(err);
-    if(msg) {
-        res.status(status).send(msg);
-    } else {
-        res.status(status).end();
-    }
-
-}
-
-function freeStorageSpace() {
-
-    if(!freeingStorageSpace) {
-        freeingStorageSpace = true;
-
-        redis.get("totalSpace", function(err, val) {
-
-            if(err) {
-                freeingStorageSpace = false;
-                return console.error(err);
-            }
-
-            var currentSize = parseInt(val);
-
-            var amountToFree = currentSize - (config.persistence.max_size * config.persistence.free_percentage / 100);
-            var freedAmount = 0;
-            //TODO: make sure the space is decremented before freeingStorageSpace is set to false
-
-            redis.sort("fileIds", 'by', "*->lastAccess", 'get', '#', 'get', '*->size', 'get', '*->name', 'LIMIT', "0", "30", function(err, result) {
-                for(var i = 0; i < result.length && freedAmount < amountToFree; i+=3) {
-                    var id = result[i];
-                    var size = parseInt(result[i+1]);
-                    var name = result[i+2];
-
-                    redis.del(id);
-                    redis.srem('fileIds', id);
-                    redis.decrby('totalSpace', size);
-
-                    var filePath = path.join(
-                        config.persistence.directory,
-                        name
-                    );
-
-                    fs.unlink(filePath);
-
-                    freedAmount += size;
-
-                }
-
-                freeingStorageSpace = false;
-            });
-
-        });
-
-
-    }
-
-}
 
 start();
