@@ -30,7 +30,23 @@ WorkerPool.prototype = {
     constructor: WorkerPool,
 
     add: function(worker) {
-        this.idle.push(worker);
+        if(worker.isCompletellyBusy()) {
+            this.busy.push(worker);
+        } else {
+            this.idle.push(worker);
+        }
+    },
+
+    /**
+     *
+     * @param worker Worker should be idle
+     */
+    remove: function(worker) {
+        var index = this.idle.indexOf(worker);
+
+        if(index >= 0) {
+            this.idle.splice(index, 1);
+        }
     },
 
     allBusy: function() {
@@ -41,10 +57,11 @@ WorkerPool.prototype = {
         return this.busy.length === 0;
     },
 
-    getIdleAndAddJob: function() {
+    executeJobInIdle: function(job) {
+
         var worker = this.idle.shift();
         if(worker != null) {
-            worker.incrementJobCount();
+            worker.startJob(job);
             if(!worker.isCompletellyBusy()) { //Not all concurrent jobs reached so add it to the end of idle queue
                 this.idle.push(worker);
             } else { // All concurrent jobs reached so add it to the busy queue
@@ -59,23 +76,27 @@ WorkerPool.prototype = {
 
     setIdle: function(worker) {
 
-        var index = this.idle.indexOf(worker);
+        var index = this.busy.indexOf(worker);
 
-        if(index >= 0) { //It is in the idle queue
-            this.idle[index].decrementJobCount();
-
-        } else { //Try to find it in the busy queue
-
-            index = this.busy.indexOf(worker);
-
-            if(index != -1) {
-                this.busy[index].decrementJobCount();
-                this.idle.push(this.busy.splice(index, 1)[0]);
-            } else {
-                throw new Error("Worker could not be found!");
-            }
+        if(index >= 0) { //It is in the busy queue, move it to the idle one
+            this.idle.push(this.busy.splice(index, 1)[0]);
         }
 
+    },
+
+    /**
+     * Refresh he internal queue for the worker. This method is used to update the WorkerPool after a change in the
+     * number of maxjobs in a worker.
+     * @param worker
+     */
+    refresh: function(worker) {
+        var index = this.idle.indexOf(worker);
+        if(index != -1 && worker.isCompletellyBusy()) {
+            this.busy.push(this.idle.splice(index, 1)[0]);
+        } else if(index == -1 && !worker.isCompletellyBusy()) {
+            index = this.busy.indexOf(worker);
+            this.idle.push(this.busy.splice(index, 1)[0]);
+        }
     }
 };
 

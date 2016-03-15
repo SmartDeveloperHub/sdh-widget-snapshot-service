@@ -23,15 +23,20 @@
 
 var Bridge = require('./PhantomBridge');
 
-function WidgetSnapshotProvider (id, timeout) {
+function WidgetSnapshotProvider (id, workerPool, onKill) {
     this.id = id;
-    this.timeout = timeout;
     this.creationDate = new Date();
     this.isReady = false;
     this.bridge = null;
     this.currentJob = null;
     this.currentJobs = 0;
+    this.maxJobs = 0;
+    this.jobs = {};
     this.timeoutId = null;
+    this.workerPool = workerPool;
+    this.onKill = onKill;
+
+    this.workerPool.add(this);
 }
 
 WidgetSnapshotProvider.prototype = {
@@ -50,15 +55,16 @@ WidgetSnapshotProvider.prototype = {
         this.bridge = new Bridge(this.id);
         this.bridge.initFramework(requireJsWidgetList, api_url, phantomWebMessageHandler.bind(this), onReady);
 
+        this.isReady = true;
 
     }
 
     , destroy: function() {
-
-        this.isReady = false;
-        this.bridge.close();
-        this.bridge = null;
-
+        if(this.isReady) {
+            this.isReady = false;
+            this.bridge.close();
+            this.bridge = null;
+        }
     }
 
     , getCreationDate: function() {
@@ -69,41 +75,38 @@ WidgetSnapshotProvider.prototype = {
         return this.isReady;
     }
 
-    , getChartImage: function(chart, viewPort, metrics, config, onImageReady, onError) {
+    , getChartImage: function(job) {
 
-        if(typeof onImageReady !== 'function')
-            throw new Error(this.msg('A onImageReady function must be specified in "getChartImage" method.'));
+        if(typeof job.data.onImageReady !== 'function')
+            throw new Error(job.worker.msg('A onImageReady function must be specified in "getChartImage" method.'));
 
-        if(this.currentJob != null) {
-            throw new Error(this.msg('The WidgetSnapshotProvider instance is busy!'));
+        if(job.worker.currentJob != null) {
+            throw new Error(job.worker.msg('The WidgetSnapshotProvider instance is busy!'));
         }
 
-        this.currentJob = {
-            chart: chart,
-            metrics: metrics,
-            config: config,
-            onImageReady: onImageReady,
-            onError: onError
-        };
+        if(!job.worker.isReady) {
+            throw new Error(job.worker.msg('The WidgetSnapshotProvider instance is not initialized!'));
+        }
+
+        job.worker.currentJob = job;
 
         //Set the viewport
-        this.bridge.getPage().viewportSize = viewPort;
+        job.worker.bridge.getPage().viewportSize = job.data.viewport;
 
         //Set the clipRect to be sure that the image generated is of the size we want
-        this.bridge.getPage().clipRect = {
+        job.worker.bridge.getPage().clipRect = {
             top: 0,
             left: 0,
-            width: viewPort.width,
-            height: viewPort.height
+            width: job.data.viewport.width,
+            height: job.data.viewport.height
         };
 
         //Load the chart in the web executor
         //The execution of the job will continue when the DATA_RECEIVED event is received
-        var success = this.bridge.getPage().evaluate(chartCreateWebFunction, chart, metrics, config, this.timeout); //TODO: maybe asynchronous?
+        var success = job.worker.bridge.getPage().evaluate(chartCreateWebFunction, job.data.chart, job.data.metrics, job.data.config); //TODO: maybe asynchronous?
 
         if(!success) {
-            this.bridge.getPage().evaluate(chartDeleteWebFunction);
-            onError(); //Callback with empty file name
+            processErrorEvent("Some king of error happened.");
         }
 
     }
@@ -113,26 +116,68 @@ WidgetSnapshotProvider.prototype = {
     },
 
     kill: function () {
-        this.destroy();
-        this.currentJobs = 0;
-    },
-
-    decrementJobCount: function() {
-        if(this.currentJobs > 0) {
-            this.currentJobs--;
+        if(this.isReady) {
+            this.destroy();
+            this.currentJob.abort(408, "Max execution time reached");
+            this.currentJobs = 0;
+            this.onKill(this);
         }
     },
 
-    incrementJobCount: function() {
-        if(this.currentJobs < 1) {
-            this.currentJobs = 1;
+    setJobFinished: function(job) {
+        if(this.isReady && this.currentJobs > 0) {
+
+            this.currentJobs--;
+            this.currentJob = null;
+
+            this.workerPool.setIdle(this);
+
+            var jobInfo = this.jobs[job.id];
+            delete this.jobs[job.id];
+
+            clearTimeout(jobInfo.timeout);
+        }
+    },
+
+    startJob: function(job) {
+        if(this.isReady && this.currentJobs < this.maxJobs) {
+
+            // Add the job to the list of jobs
+            this.jobs[job.id] = {
+                job: job,
+                timeout: setTimeout(this.kill.bind(this), job.maxExecTime)
+            };
+
+            this.currentJobs++;
+
+            // Run the job
+            job.start(this);
+
         } else {
             throw new Error("This worker has reached the maximum of jobs");
         }
     },
 
     isCompletellyBusy: function() {
-        return this.currentJobs === 1;
+        return this.currentJobs >= this.maxJobs;
+    },
+
+    decreaseMaxJobs: function(amount) {
+        if(amount > 0) {
+            this.maxJobs -= amount;
+            if (this.maxJobs < 0) {
+                this.maxJobs = 0;
+            }
+            this.workerPool.refresh(this);
+        }
+    },
+
+    increaseMaxJobs: function(amount) {
+        if(amount > 0) {
+            this.maxJobs += amount;
+            this.workerPool.refresh(this);
+        }
+
     }
 
 };
@@ -154,12 +199,11 @@ var processChartReadyEvent = function() {
     //Clear the chart
     this.bridge.getPage().evaluate(chartDeleteWebFunction);
 
-    // Clear the current job information
-    var onImageReady = this.currentJob.onImageReady;
-    this.currentJob = null;
-
     // Execute the callback
-    onImageReady(success ? fileName : undefined);
+    this.currentJob.data.onImageReady(this.currentJob, success ? fileName : undefined);
+
+    // Clear the current job information
+    this.currentJob.setFinished();
 
 };
 
@@ -174,12 +218,8 @@ var processErrorEvent = function(msg) {
     //Clear the chart
     this.bridge.getPage().evaluate(chartDeleteWebFunction);
 
-    // Clear the current job information
-    var onError = this.currentJob.onError;
-    this.currentJob = null;
+    this.currentJob.abort(400, msg);
 
-    // Execute error callback
-    onError(msg);
 };
 
 
@@ -188,6 +228,7 @@ var processErrorEvent = function(msg) {
  * @param data
  */
 var phantomWebMessageHandler = function(data) {
+
     switch (data.type) {
         case 'DATA_RECEIVED': processDataReceivedEvent.call(this); break;
         case 'CHART_READY': processChartReadyEvent.call(this); break;
@@ -216,10 +257,9 @@ var chartDeleteWebFunction = function() {
  * @param chartType Name of the class of the chart (the name with which the chart is registered in the sdh-framework).
  * @param metrics Metrics array to pass to the chart constructor.
  * @param config Configuration to pass to the chart constructor.
- * @param timeout Maximum execution time
  * @returns {boolean}
  */
-var chartCreateWebFunction = function(chartType, metrics, config, timeout) {
+var chartCreateWebFunction = function(chartType, metrics, config) {
 
     //TODO: allow functions in config??
     //TODO: improve function detection (with/without spaces, with/without name, etc)
@@ -276,17 +316,7 @@ var chartCreateWebFunction = function(chartType, metrics, config, timeout) {
             };
 
             window.chart = new constructor(domElement, metrics, [], config);
-            Bridge.transmitEventAndExecute(window.chart, "DATA_RECEIVED", false, function() {
-                clearTimeout(window.chartTimeout);
-                window.chartTimeout = null;
-            });
-
-            //Set a timeout
-            window.chartTimeout = setTimeout(function() {
-                window.chartTimeout = null;
-                Bridge.sendToPhantom("ERROR", "Max execution time reached!");
-
-            }, timeout);
+            Bridge.transmitEventAndExecute(window.chart, "DATA_RECEIVED", false);
 
             return true;
         }

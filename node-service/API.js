@@ -21,6 +21,8 @@
 
 const http = require('http');
 const PersistenceController = require('./PersistenceController');
+const Job = require('./../common/Job');
+const config = require('../config');
 const fs = require('fs');
 
 var app = require('express')();
@@ -93,7 +95,16 @@ var handlePersistentImagePostRequest = function(req, res) {
         }
     };
 
-    jobQueue.executeOrQueueJob(makePhantomImageRequest, false, jobData);
+    var onAbort = function(job, status, msg) {
+        if(job.data.httpRequest != null) {
+            job.data.httpRequest.abort();
+        }
+        res.status(status).send(msg);
+    };
+
+    var job = new Job(makePhantomImageRequest, jobData, config.phantom.timeout, onAbort);
+
+    jobQueue.executeOrQueueJob(job, false);
 
 };
 
@@ -163,28 +174,39 @@ var handleImageGetRequest = function(req, res) {
         }
     };
 
-    jobQueue.executeOrQueueJob(makePhantomImageRequest, false, jobData);
+    var onAbort = function(job, status, msg) {
+        if(job.data.httpRequest != null) {
+            job.data.httpRequest.abort();
+        }
+        res.status(status).send(msg);
+    };
+
+    var job = new Job(makePhantomImageRequest, jobData, config.phantom.timeout, onAbort);
+
+    jobQueue.executeOrQueueJob(job, false);
 
 };
 
-var makePhantomImageRequest = function(worker, jobData) {
+var makePhantomImageRequest = function(job) {
 
-    console.log("Request:" + jobData.imageUrl);
-    console.log("Port: " + worker.port);
+    console.log("Request:" + job.data.imageUrl);
+    console.log("Port: " + job.worker.port);
 
-    http.get(
+    job.data.httpRequest = http.get(
         {
             hostname: '127.0.0.1',
-            port: worker.port,
-            path: jobData.imageUrl
+            port: job.worker.port,
+            path: job.data.imageUrl
         },
-        handlePhantomImageResponse.bind(null, worker, jobData)
-    );
+        handlePhantomImageResponse.bind(null, job)
+    ).on('error', function(e) {
+        console.log("Conection error: " + e.message);
+    });
 
 };
 
 
-var handlePhantomImageResponse = function(worker, jobData, response) {
+var handlePhantomImageResponse = function(job, response) {
 
     switch(response.statusCode) {
 
@@ -192,13 +214,13 @@ var handlePhantomImageResponse = function(worker, jobData, response) {
 
             readResponseBody(response, function(body) {
 
-                // Mark the worker as idle
-                workerPool.setIdle(worker);
+                // Mark the job as finished
+                job.setFinished();
 
-                jobData.callback(response.statusCode, body);
+                job.data.callback(response.statusCode, body);
 
                 // Start next job
-                jobQueue.nextJob();
+                jobQueue.processJobs();
 
             });
 
@@ -208,8 +230,17 @@ var handlePhantomImageResponse = function(worker, jobData, response) {
 
             console.error('The worker was not idle!!');
 
+            var worker = job.worker;
+
+            // Set as finished and clone the job
+            var newJob = new Job(job.method, job.data, job.maxExecTime, job.onAbort);
+            job.setFinished();
+
+            // We have to temporally decrease the number of jobs that the worker can handle
+            worker.decreaseMaxJobs(1);
+
             // Try to reprocess it
-            jobQueue.executeOrQueueJob(makePhantomImageRequest, true, jobData);
+            jobQueue.executeOrQueueJob(newJob, true);
 
             break;
 
@@ -217,12 +248,13 @@ var handlePhantomImageResponse = function(worker, jobData, response) {
 
             readResponseBody(response, function(body) {
 
-                workerPool.setIdle(worker);
+                // Mark the job as finished
+                job.setFinished();
 
-                jobData.callback(response.statusCode, body);
+                job.data.callback(response.statusCode, body);
 
                 //Start next job
-                jobQueue.nextJob();
+                jobQueue.processJobs();
 
             });
 

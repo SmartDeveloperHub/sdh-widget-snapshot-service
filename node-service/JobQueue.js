@@ -29,50 +29,37 @@ function JobQueue (workerPool) {
 JobQueue.prototype = {
     constructor: JobQueue,
 
-    queueJob: function(method, onTop, data) {
-
+    queueJob: function(job, onTop) {
         // If it has priority, put it at the beginning of the queue
         if(onTop) {
-            this.queue.unshift({
-                data: data,
-                method: method
-            });
+            this.queue.unshift(job);
 
         } else {
-            this.queue.push({
-                data: data,
-                method: method
-            });
+            this.queue.push(job);
         }
     },
 
-    nextJob: function(worker) {
+    processJobs: function() {
 
-        var job = this.queue.shift();
+        do {
+            var job = this.queue.shift();
 
-        if(job != null) {
-            job.method(worker, job.data);
-        }
+            if(job != null) { // Try to execute job in an idle worker
+                var worker = this.workerPool.executeJobInIdle(job);
+                if(worker == null) { //Could not be executed, add it again to the queue
+                    this.queue.unshift(job);
+                }
+            }
+        } while(job != null && worker != null);
 
     },
-    executeOrQueueJob: function(method, onTop, data) {
 
-        //Select the worker that will handle this request
-        var worker = this.workerPool.getIdleAndAddJob();
+    executeOrQueueJob: function(job, onTop) { //TODO: remove this method
 
-        if(worker != null && this.queue.length === 0) { //If an idle worker is found and this is the only job
-            method(worker, data);
+        // Queue the job
+        this.queueJob(job, onTop);
 
-        } else if(worker != null) { // If there are jobs pending, queue this one and execute the next one
-
-            this.queueJob(method, onTop, data);
-            this.nextJob(worker);
-
-        } else { // No idle workers, queue request
-
-            this.queueJob(method, onTop, data);
-
-        }
+        this.processJobs();
 
     }
 

@@ -27,6 +27,7 @@ var system = require('system');
 
 var WidgetSnapshotProvider = require('./WidgetSnapshotProvider');
 var WorkerPool = require('./../common/WorkerPool');
+var Job = require('./../common/Job');
 var config = require('./../config.js');
 
 var workerPool = null;
@@ -70,7 +71,8 @@ var main = function() {
     // Fill the pool with workers
     var startedCount = 0;
     for(var i = 0; i < NUMBER_WORKERS; i++) {
-        var snapshotProvider = new WidgetSnapshotProvider(i, TIMEOUT);
+
+        var snapshotProvider = new WidgetSnapshotProvider(i, workerPool, onKill);
         snapshotProvider.init(requireJsWidgetList, config.api.url, function(snapshotProvider, success) {
 
             if(!success) {
@@ -78,8 +80,10 @@ var main = function() {
                 phantom.exit(PROVIDER_INITIALIZATION_ERROR);
             }
 
-            workerPool.add(snapshotProvider);
-            console.log("Worker " + snapshotProvider.id + " added to pool.");
+            snapshotProvider.increaseMaxJobs(1);
+
+            //Do not remove this log. Is used for communication purposes with node.
+            console.log("Executor ready");
 
             if(++startedCount === NUMBER_WORKERS) {
                 startListening();
@@ -89,6 +93,35 @@ var main = function() {
 
     }
 
+};
+
+//TODO: refactor this code
+var onKill = function(worker) {
+
+    workerPool.remove(worker);
+
+    var requireJsWidgetList = [];
+
+    //Obtain the list to give to the snapshot providers
+    for(var i = widgets.length -1; i >= 0; i--) {
+        requireJsWidgetList.push(widgets[i].requireJsPath);
+    }
+
+    var snapshotProvider = new WidgetSnapshotProvider(new Date().getTime(), workerPool, onKill);
+    snapshotProvider.init(requireJsWidgetList, config.api.url, function(snapshotProvider, success) {
+
+        if(!success) {
+            console.error("Unable to init WidgetSnapshotProvider");
+            phantom.exit(PROVIDER_INITIALIZATION_ERROR);
+        }
+
+        snapshotProvider.increaseMaxJobs(1);
+
+        //Do not remove this log. Is used for communication purposes with node.
+        console.log("Executor ready");
+
+
+    }.bind(null, snapshotProvider));
 };
 
 var obtainWidgetList = function() {
@@ -175,15 +208,14 @@ var startListening = function() {
         phantom.exit(API_INITIALIZATION_ERROR);
     }
 
-    console.log("Listening for requests in "+LISTEN_IP + ':' + LISTEN_PORT+ " ...");
+    // Do not remove this message. Is needed to communicate to node that this process is ready!
+    console.log("Worker started in port " + LISTEN_PORT);
 
 };
 
 var handleGetImage = function(request, response, requestUrlInfo) {
 
-    var onJobFinished = function(snapshotProvider, fileName) {
-
-        workerPool.setIdle(snapshotProvider);
+    var onJobFinished = function(job, fileName) {
 
         if(fileName != null) {
             response.statusCode = 200;
@@ -197,12 +229,9 @@ var handleGetImage = function(request, response, requestUrlInfo) {
 
     };
 
-    var onJobError = function(snapshotProvider, msg) {
-
-        workerPool.setIdle(snapshotProvider);
-
-        response.statusCode = 400;
-        response.write((msg ? "Error: " + msg : "Error while creating the chart"));
+    var onJobError = function(job, status, msg) {
+        response.statusCode = (status ? status: 400);
+        response.write((msg ? msg : "Error while creating the chart"));
         response.close();
     };
 
@@ -251,18 +280,17 @@ var handleGetImage = function(request, response, requestUrlInfo) {
 
 var executeJob = function(chart, metrics, configuration, viewport, onJobFinished, onJobError) {
 
-    var snapshotProvider = workerPool.getIdleAndAddJob();
+    var data = {
+        chart: chart,
+        metrics: metrics,
+        config: configuration,
+        viewport: viewport,
+        onImageReady: onJobFinished
+    };
+    var job = new Job(WidgetSnapshotProvider.prototype.getChartImage, data, TIMEOUT, onJobError);
+    var snapshotProvider = workerPool.executeJobInIdle(job);
 
-    if(snapshotProvider != null) {
-        snapshotProvider.getChartImage(chart, viewport, metrics, configuration,
-            onJobFinished.bind(null, snapshotProvider),
-            onJobError.bind(null, snapshotProvider));
-
-        return true;
-
-    } else { //No idle workers
-        return false;
-    }
+    return snapshotProvider != null;
 
 };
 

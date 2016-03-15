@@ -21,49 +21,42 @@
 
 "use strict";
 
-function JobStatusController () {
-    this.nextId = 0;
-    this.pending = {};
+function Job (method, data, maxExecTime, onAbort) {
+    this.method = method;
+    this.data = data;
+    this.maxExecTime = maxExecTime;
+    this.id = Job.prototype.nextId++;
+    this.worker = null;
+    this.status = 0;
+    this.onAbort = onAbort;
 }
 
-JobStatusController.prototype = {
-    constructor: JobStatusController,
+Job.prototype = {
+    constructor: Job,
+    nextId: 0,
 
-    watch: function(worker, job, timeout, onTimeout) {
-        var id = this.nextId++;
-        this.pending[id] = {
-            worker: worker,
-            job: job,
-            onTimeout: onTimeout,
-            timeoutId: setTimeout(onJobTimeoutController.bind(this, id), timeout)
+    start: function(worker) {
+        if(this.status === 0) {
+            this.status = 1;
+            this.worker = worker;
+            this.method(this);
         }
     },
 
-    setFinished: function(id) {
-        clearTimeout(this.pending[id].timeoutId);
-        delete this.pending[id];
+    setFinished: function() {
+        if(this.status === 1) {
+            this.status = 2;
+            this.worker.setJobFinished(this);
+        }
+    },
+
+    abort: function(status, msg) {
+        if(this.status === 1) {
+            this.worker.setJobFinished(this);
+            if(typeof this.onAbort === 'function') this.onAbort(this, status, msg);
+        }
     }
 
 };
 
-var onJobTimeoutController = function(id) {
-
-    var info = this.pending[id];
-
-    clearTimeout(info.timeoutId);
-
-    var next = true;
-    if(typeof info.onTimeout === 'function') {
-        next = info.onTimeout(info.worker, info.job) !== false;
-    }
-
-    if(next) {
-        info.worker.kill();
-    }
-
-    delete this.pending[id];
-
-};
-
-
-module.exports = JobStatusController;
+module.exports = Job;

@@ -28,7 +28,6 @@ const fs = require('fs');
 const WorkerPool = require('./../common/WorkerPool');
 const PhantomWorker = require('./PhantomWorker');
 const JobQueue = require('./JobQueue');
-const JobStatusController = require('./JobStatusController');
 const config = require('./../config');
 const Redis = require('redis');
 const API = require('./API');
@@ -37,8 +36,6 @@ var PORT_SEARCH_BEGIN = config.phantom.start_port; //Number of port to start loo
 var LISTEN_PORT = config.port;
 var NUMBER_WORKERS = config.phantom.workers;
 var NUMBER_EXECUTORS_PER_WORKER = config.phantom.executors_per_worker;
-
-var jobStatusController = new JobStatusController();
 
 // Globals
 global.redis = null;
@@ -52,11 +49,13 @@ var start = function() {
 
     redis.on('connect', function() {
 
+        workerPool = new WorkerPool();
+
+        // Create a job queue using the worker pool that has been created
+        jobQueue = new JobQueue(workerPool);
+
         // First spawn the phantom processes that will serve the requests
         startPhantomWorkers( function() {
-
-            // Create a job queue using the worker pool that has been created
-            jobQueue = new JobQueue(workerPool);
 
             // Once all the workers are ready start the API service
             API.start(LISTEN_PORT);
@@ -78,9 +77,8 @@ var startPhantomWorkers = function(callback) {
     var phantomJsExecutable = phantomjs.path;
 
     var workersReady = 0;
-    workerPool = new WorkerPool();
 
-    var launchWorker = function() {
+    var launchWorker = function(oneLaunchedCb) {
 
         // Find a free port and spawn a phantom service in that port
         getPort(function(port) {
@@ -97,13 +95,22 @@ var startPhantomWorkers = function(callback) {
 
             // Spawn the worker process
             var proc = childProcess.execFile(phantomJsExecutable, childArgs, procOpts);
-            //TODO: handle case in which a worker dies
 
-            workerPool.add(new PhantomWorker(proc, port, NUMBER_EXECUTORS_PER_WORKER));
+            var onKill = function(worker) {
+                launchWorker(function() {
+                    jobQueue.processJobs();
+                });
+            };
 
-            if(++workersReady === NUMBER_WORKERS) {
-                callback();
-            }
+            new PhantomWorker(proc, port, workerPool, function(worker) {
+
+                if(typeof oneLaunchedCb === 'function') oneLaunchedCb();
+
+                if(++workersReady === NUMBER_WORKERS) {
+                    callback();
+                }
+
+            }, onKill);
 
         });
     };
