@@ -215,10 +215,12 @@ var processDataReceivedEvent = function() {
 
 var processErrorEvent = function(msg) {
 
+    console.error(msg);
+
     //Clear the chart
     this.bridge.getPage().evaluate(chartDeleteWebFunction);
 
-    this.currentJob.abort(400, msg);
+    this.currentJob.abort(500, msg);
 
 };
 

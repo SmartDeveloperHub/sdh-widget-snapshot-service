@@ -61,6 +61,10 @@ Bridge.prototype = {
             console.log(this.msg('WEB-CONSOLE: ' + msg + ' (from line #' + lineNum + ' in "' + sourceId + '")'));
         }.bind(this);
 
+        this.page.onError = function(msg, trace) {
+            this.externalMessageHandler({ type: 'ERROR', data: msg });
+        }.bind(this);
+
         // Message handler (between Phantom and the WebExecutor)
         this.page.onCallback = messageHandler.bind(this);
 
