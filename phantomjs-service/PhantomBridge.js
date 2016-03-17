@@ -137,13 +137,13 @@ var frameworkInitializationWebFunction = function(widgets, api_url) {
         Bridge.sendToPhantom("frameworkReady", {success: false, error: err});
     };
 
-    require(["optimizations"], function() { //Load the optimizations before the framework
+    require(["pre_optimizations"], function() { //Load the optimizations before the framework
 
         require(widgets, function() {
 
             window.framework.ready(function() {
 
-                require(["sandbox", "utils"], function() { //Load the sandbox
+                require(["sandbox", "utils", "post_optimizations"], function() {
 
                     window.framework.ready(function() {
                         Bridge.sendToPhantom("frameworkReady", {success: true});

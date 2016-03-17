@@ -19,23 +19,36 @@
     #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=#
 */
 
+/**
+ * The code for the optimizations that has to be executed after the framework has been loaded
+ */
 (function() {
 
-    var callbacks = [];
+    // For nvd3: overwrite the addGraph method to make sure that the CHART_READY event is triggered
+    if(nv != null) {
+        window._addGraph = window._addGraph || nv.addGraph;
+        nv.addGraph = function(generator, callback) {
+            window._addGraph(generator, function(c) {
+                flushAnimationFrames();
+                Bridge.sendToPhantom("CHART_READY", null);
+                if (typeof callback === 'function') callback(c);
+            })
+        };
+    }
 
-    window.requestAnimationFrame = function(callback) {
-        callbacks.push(callback);
-    };
-
-    window.flushAnimationFrames = function() {
-        var now = Date.now;
-        Date.now = function() { return Infinity; };
-        var nc = callbacks.length;
-        for(var ci = 0; ci < nc; ci++) {
-            var callback = callbacks.shift();
-            try { callback(); } catch (e) { console.error(e); }
+    // Deactivate animations and wait for the animation to be completed
+    if(Chart != null) {
+        var count = 2; //We need to wait for the second one (the first one is the creaion of the chart)
+        Chart.defaults.global.animation = false;
+        Chart.defaults.global.onAnimationComplete = function() {
+            if(--count === 0) {
+                Bridge.sendToPhantom("CHART_READY", null);
+            }
         }
-        Date.now = now;
-    };
+    }
+
+    window.resetOptimizations = function resetOptimizations() {
+        count = 2; //Reset counter for the ChartJs optimization
+    }
 
 })();

@@ -245,6 +245,8 @@ var phantomWebMessageHandler = function(data) {
 
 var chartDeleteWebFunction = function() {
 
+    window.resetOptimizations();
+
     //Clear previous chart
     if(window.chart != null) {
         Bridge.stopEventTransmission(window.chart, "DATA_RECEIVED");
@@ -264,29 +266,7 @@ var chartDeleteWebFunction = function() {
  */
 var chartCreateWebFunction = function(chartType, metrics, config) {
 
-    //TODO: move this code to the initialization
     //TODO: if no chart ready is generated, flushAnimationFrames
-    //For nvd3: overwrite the addGraph method to make sure that the CHART_READY event is triggered
-    if(nv != null) {
-        window._addGraph = window._addGraph || nv.addGraph;
-        nv.addGraph = function(generator, callback) {
-            window._addGraph(generator, function(c) {
-                flushAnimationFrames();
-                Bridge.sendToPhantom("CHART_READY", null);
-                if (typeof callback === 'function') callback(c);
-            })
-        };
-    }
-
-    if(Chart != null) {
-        var count = 2; //We need to wait for the second one (the first one is the creaion of the chart)
-        Chart.defaults.global.animation = false;
-        Chart.defaults.global.onAnimationComplete = function() {
-            if(--count === 0) {
-                Bridge.sendToPhantom("CHART_READY", null);
-            }
-        }
-    }
 
     for(var param in config) {
         var val = config[param];
