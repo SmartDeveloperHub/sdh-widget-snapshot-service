@@ -186,6 +186,7 @@ var processChartReadyEvent = function() {
 
     if(this.currentJob == null) {
         console.warn(this.msg("A job in the WidgetSnapshotProvider was lost!!!"));
+        return;
     }
 
     if(this.timeoutId != null) {
@@ -263,9 +264,8 @@ var chartDeleteWebFunction = function() {
  */
 var chartCreateWebFunction = function(chartType, metrics, config) {
 
-    //TODO: allow functions in config??
-    //TODO: improve function detection (with/without spaces, with/without name, etc)
-
+    //TODO: move this code to the initialization
+    //TODO: if no chart ready is generated, flushAnimationFrames
     //For nvd3: overwrite the addGraph method to make sure that the CHART_READY event is triggered
     if(nv != null) {
         window._addGraph = window._addGraph || nv.addGraph;
@@ -278,12 +278,15 @@ var chartCreateWebFunction = function(chartType, metrics, config) {
         };
     }
 
-    /*if(Chart != null) {
+    if(Chart != null) {
+        var count = 2; //We need to wait for the second one (the first one is the creaion of the chart)
         Chart.defaults.global.animation = false;
         Chart.defaults.global.onAnimationComplete = function() {
-            Bridge.sendToPhantom("CHART_READY", null);
+            if(--count === 0) {
+                Bridge.sendToPhantom("CHART_READY", null);
+            }
         }
-    }*/
+    }
 
     for(var param in config) {
         var val = config[param];
