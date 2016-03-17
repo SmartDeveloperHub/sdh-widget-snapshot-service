@@ -255,8 +255,8 @@ var handleGetImage = function(request, response, requestUrlInfo) {
 
         //If viewport is not set, set the default values
         viewport = {};
-        viewport.height = requestUrlInfo.params['height'] || configuration['height'] || 450;
-        viewport.width = requestUrlInfo.params['width'] || configuration['width'] || 450;
+        viewport.height = parseInt(requestUrlInfo.params['height'] || configuration['height'] || 450);
+        viewport.width = parseInt(requestUrlInfo.params['width'] || configuration['width'] || 450);
 
         if(configuration.height == null) {
             configuration.height = viewport.height;
