@@ -47,6 +47,12 @@
         }
     }
 
+    // Deactivate common widget loading transition
+    framework.widgets.CommonWidget.prototype.startLoading = function() { };
+    framework.widgets.CommonWidget.prototype.endLoading = function(cb) {
+        cb();
+    };
+
     window.resetOptimizations = function resetOptimizations() {
         count = 2; //Reset counter for the ChartJs optimization
     }
