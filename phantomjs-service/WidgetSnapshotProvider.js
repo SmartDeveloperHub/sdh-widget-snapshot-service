@@ -182,7 +182,7 @@ WidgetSnapshotProvider.prototype = {
 
 };
 
-var processChartReadyEvent = function() {
+var processChartReadyEvent = function(causedByTimeout) {
 
     if(this.currentJob == null) {
         console.warn(this.msg("A job in the WidgetSnapshotProvider was lost!!!"));
@@ -192,6 +192,13 @@ var processChartReadyEvent = function() {
     if(this.timeoutId != null) {
         clearTimeout(this.timeoutId);
         this.timeoutId = null;
+    }
+
+    // If no CHART_READY event was received, the make sure to flush the animation frames before taking the snapshot
+    if(causedByTimeout) {
+        this.bridge.getPage().evaluate(function() {
+            flushAnimationFrames();
+        });
     }
 
     var fileName = '/tmp/' + Math.round(Math.random() * 1000000000) + ".png"; //TODO: compatibility with Windows?
@@ -210,7 +217,7 @@ var processChartReadyEvent = function() {
 
 var processDataReceivedEvent = function() {
     if(this.currentJob != null) {
-        this.timeoutId = setTimeout(processChartReadyEvent.bind(this), 500);
+        this.timeoutId = setTimeout(processChartReadyEvent.bind(this, true), 200);
     }
 };
 
