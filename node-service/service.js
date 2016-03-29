@@ -89,6 +89,13 @@ var startPhantomWorkers = function(callback) {
                 port
             ];
 
+            if(config.phantom.cache) {
+                childArgs.unshift("--disk-cache=true");
+                if(config.phantom.cache_limit > 0) {
+                    childArgs.unshift("--max-disk-cache-size=" + parseInt(config.phantom.cache_limit));
+                }
+            }
+
             var procOpts = {
                 cwd: path.join(__dirname, '..', 'phantomjs-service')
             };
