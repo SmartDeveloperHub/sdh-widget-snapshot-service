@@ -201,17 +201,20 @@ var processChartReadyEvent = function(causedByTimeout) {
         });
     }
 
-    var fileName = '/tmp/' + Math.round(Math.random() * 1000000000) + ".png"; //TODO: compatibility with Windows?
-    var success = this.bridge.getPage().render(fileName);
+    // Yield to make sure that rendering has been done
+    setTimeout(function() {
+        var fileName = '/tmp/' + Math.round(Math.random() * 1000000000) + ".png"; //TODO: compatibility with Windows?
+        var success = this.bridge.getPage().render(fileName);
 
-    //Clear the chart
-    this.bridge.getPage().evaluate(chartDeleteWebFunction);
+        //Clear the chart
+        this.bridge.getPage().evaluate(chartDeleteWebFunction);
 
-    // Execute the callback
-    this.currentJob.data.onImageReady(this.currentJob, success ? fileName : undefined);
+        // Execute the callback
+        this.currentJob.data.onImageReady(this.currentJob, success ? fileName : undefined);
 
-    // Clear the current job information
-    this.currentJob.setFinished();
+        // Clear the current job information
+        this.currentJob.setFinished();
+    }.bind(this), 0);
 
 };
 
