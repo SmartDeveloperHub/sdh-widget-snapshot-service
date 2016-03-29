@@ -22,10 +22,12 @@
 "use strict";
 
 var config = require('../config');
+var childProcess = require('child_process');
+var phantomjs = require('phantomjs-prebuilt');
+var path = require('path');
 
 //TODO: create a parent class for workers that contains the common methods
-function PhantomWorker (process, port, workerPool, onReady, onKill) {
-    this.process = process;
+function PhantomWorker (port, workerPool, onReady, onKill) {
     this.port = port;
     this.currentJobs = 0;
     this.maxJobs = 0;
@@ -36,17 +38,42 @@ function PhantomWorker (process, port, workerPool, onReady, onKill) {
 
     this.workerPool.add(this);
 
-    process.stdout.on('data', function(data) {
+    //Path to the PhantomJS executable
+    var phantomJsExecutable = phantomjs.path;
+
+    var childArgs = [
+        "--web-security=false",
+        path.join(__dirname, '..', 'phantomjs-service', 'phantomjs-service.js'),
+        port
+    ];
+
+    if(config.phantom.cache) {
+        childArgs.unshift("--disk-cache=true");
+        if(config.phantom.cache_limit > 0) {
+            childArgs.unshift("--max-disk-cache-size=" + parseInt(config.phantom.cache_limit));
+        }
+    }
+
+    var procOpts = {
+        cwd: path.join(__dirname, '..', 'phantomjs-service')
+    };
+
+    // Spawn the worker process
+    this.process = childProcess.execFile(phantomJsExecutable, childArgs, procOpts);
+
+    this.process.stdout.on('data', function(data) {
         if(data.indexOf("Worker started in port " + port) != -1) { //TODO: improve this way os passing messages
             onReady(this);
         } else if(data.indexOf("Executor ready") != -1) {
             this.increaseMaxJobs(1);
             jobQueue.processJobs();
         }
+        data = data.replace(/\n$/, ""); //Remove last new line (console.log adds one)
         console.log("[PhantomService]["+port+"]: " + data);
     }.bind(this));
 
-    process.stderr.on('data', function(data) {
+    this.process.stderr.on('data', function(data) {
+        data = data.replace(/\n$/, ""); //Remove last new line (console.log adds one)
         console.error("[PhantomService]["+port+"]: " + data);
     });
 

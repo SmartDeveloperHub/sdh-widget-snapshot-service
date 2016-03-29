@@ -19,10 +19,6 @@
     #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=#
 */
 
-
-const path = require('path');
-const childProcess = require('child_process');
-const phantomjs = require('phantomjs-prebuilt');
 const net = require('net');
 const fs = require('fs');
 const WorkerPool = require('./../common/WorkerPool');
@@ -35,7 +31,6 @@ const API = require('./API');
 var PORT_SEARCH_BEGIN = config.phantom.start_port; //Number of port to start looking for free ports
 var LISTEN_PORT = config.port;
 var NUMBER_WORKERS = config.phantom.workers;
-var NUMBER_EXECUTORS_PER_WORKER = config.phantom.executors_per_worker;
 
 // Globals
 global.redis = null;
@@ -73,9 +68,6 @@ var start = function() {
 
 var startPhantomWorkers = function(callback) {
 
-    //Path to the PhantomJS executable
-    var phantomJsExecutable = phantomjs.path;
-
     var workersReady = 0;
 
     var launchWorker = function(oneLaunchedCb) {
@@ -83,33 +75,17 @@ var startPhantomWorkers = function(callback) {
         // Find a free port and spawn a phantom service in that port
         getPort(function(port) {
 
-            var childArgs = [
-                "--web-security=false",
-                path.join(__dirname, '..', 'phantomjs-service', 'phantomjs-service.js'),
-                port
-            ];
-
-            if(config.phantom.cache) {
-                childArgs.unshift("--disk-cache=true");
-                if(config.phantom.cache_limit > 0) {
-                    childArgs.unshift("--max-disk-cache-size=" + parseInt(config.phantom.cache_limit));
-                }
-            }
-
-            var procOpts = {
-                cwd: path.join(__dirname, '..', 'phantomjs-service')
-            };
-
-            // Spawn the worker process
-            var proc = childProcess.execFile(phantomJsExecutable, childArgs, procOpts);
-
+            // If a worker dies, launch another one and try to process pending jobs
             var onKill = function(worker) {
+
+                console.log("Worker " + worker.port + " killed!");
+
                 launchWorker(function() {
                     jobQueue.processJobs();
                 });
             };
 
-            new PhantomWorker(proc, port, workerPool, function(worker) {
+            new PhantomWorker(port, workerPool, function(worker) {
 
                 if(typeof oneLaunchedCb === 'function') oneLaunchedCb();
 

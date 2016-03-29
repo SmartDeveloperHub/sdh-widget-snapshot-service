@@ -33,6 +33,7 @@ var config = require('./../config.js');
 var workerPool = null;
 var widgets = null;
 var server = null;
+var nextWorkerId = 0;
 
 var NUMBER_WORKERS = 0;
 var LISTEN_PORT = 0;
@@ -58,13 +59,6 @@ var main = function() {
     //Get a list with information about available widgets
     widgets = obtainWidgetList();
 
-    var requireJsWidgetList = [];
-
-    //Obtain the list to give to the snapshot providers
-    for(var i = widgets.length -1; i >= 0; i--) {
-        requireJsWidgetList.push(widgets[i].requireJsPath);
-    }
-
     //Create a pool of workers
     workerPool = new WorkerPool();
 
@@ -72,33 +66,17 @@ var main = function() {
     var startedCount = 0;
     for(var i = 0; i < NUMBER_WORKERS; i++) {
 
-        var snapshotProvider = new WidgetSnapshotProvider(i, workerPool, onKill);
-        snapshotProvider.init(requireJsWidgetList, config.api.url, function(snapshotProvider, success) {
-
-            if(!success) {
-                console.error("Unable to init WidgetSnapshotProvider");
-                phantom.exit(PROVIDER_INITIALIZATION_ERROR);
-            }
-
-            snapshotProvider.increaseMaxJobs(1);
-
-            //Do not remove this log. Is used for communication purposes with node.
-            console.log("Executor ready");
-
+        launchWorker(function() {
             if(++startedCount === NUMBER_WORKERS) {
                 startListening();
             }
-
-        }.bind(null, snapshotProvider));
+        });
 
     }
 
 };
 
-//TODO: refactor this code
-var onKill = function(worker) {
-
-    workerPool.remove(worker);
+var launchWorker = function(cb) {
 
     var requireJsWidgetList = [];
 
@@ -107,7 +85,7 @@ var onKill = function(worker) {
         requireJsWidgetList.push(widgets[i].requireJsPath);
     }
 
-    var snapshotProvider = new WidgetSnapshotProvider(new Date().getTime(), workerPool, onKill);
+    var snapshotProvider = new WidgetSnapshotProvider(nextWorkerId++, workerPool, onKill);
     snapshotProvider.init(requireJsWidgetList, config.api.url, function(snapshotProvider, success) {
 
         if(!success) {
@@ -120,8 +98,19 @@ var onKill = function(worker) {
         //Do not remove this log. Is used for communication purposes with node.
         console.log("Executor ready");
 
+        if(typeof cb === 'function') cb(snapshotProvider);
+
 
     }.bind(null, snapshotProvider));
+
+};
+
+var onKill = function(worker) {
+
+    workerPool.remove(worker);
+
+    launchWorker();
+
 };
 
 var obtainWidgetList = function() {

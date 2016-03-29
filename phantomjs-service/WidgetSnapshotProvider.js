@@ -25,7 +25,6 @@ var Bridge = require('./PhantomBridge');
 
 function WidgetSnapshotProvider (id, workerPool, onKill) {
     this.id = id;
-    this.creationDate = new Date();
     this.isReady = false;
     this.bridge = null;
     this.currentJob = null;
@@ -65,14 +64,6 @@ WidgetSnapshotProvider.prototype = {
             this.bridge.close();
             this.bridge = null;
         }
-    }
-
-    , getCreationDate: function() {
-        return this.creationDate;
-    }
-
-    , isReady: function() {
-        return this.isReady;
     }
 
     , getChartImage: function(job) {
