@@ -27,7 +27,7 @@ const path = require('path');
 var freeingStorageSpace = false;
 
 
-var persistFile = function(tmp_file, cb) {
+var persistFile = function(tmp_file, mime, cb) {
 
     var fileId = uuid.v4();
     var fileName = config.persistence.prefix + fileId;
@@ -50,7 +50,8 @@ var persistFile = function(tmp_file, cb) {
                 'name': fileName,
                 'size': stats.size,
                 'creation': new Date().getTime(),
-                'lastAccess': new Date().getTime()
+                'lastAccess': new Date().getTime(),
+                'mime': mime
             });
 
             redis.sadd('fileIds', fileId);

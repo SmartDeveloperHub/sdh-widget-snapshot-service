@@ -24,6 +24,7 @@ const PersistenceController = require('./PersistenceController');
 const Job = require('./../common/Job');
 const config = require('../config');
 const fs = require('fs');
+const mime = require('mime');
 
 var app = require('express')();
 
@@ -68,7 +69,7 @@ var handlePersistentImagePostRequest = function(req, res) {
             switch(statusCode) {
                 case 200:
 
-                    PersistenceController.persistFile(body, function(err, fileId) {
+                    PersistenceController.persistFile(body, 'image/png', function(err, fileId) {
                         if (err) {
                             console.error("Error moving " + body + " to " + newFilePath, err);
                             error(err, res, 500);
@@ -124,7 +125,7 @@ var handlePersistentImageGetRequest = function(req, res) {
         res.header("Last-Modified", new Date(parseInt(fileInfo.creation)).toUTCString());
 
         // Set the content type (this is needed because sendFile can not infer it because the file has no extension)
-        res.contentType(filePath);
+        res.setHeader('Content-type', fileInfo.mime);
 
         // Send the file (this does not use the sendfile system call)
         //TODO: improve send file performance using a serve static middleware
