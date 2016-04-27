@@ -47,7 +47,7 @@ var start = function() {
     LISTEN_PORT = parseInt(process.env.PORT);
     NUMBER_WORKERS = parseInt(process.env.PHANTOM_WORKERS);
 
-    redis = Redis.createClient(parseInt(process.env.PERSISTENCE_REDIS_PORT), process.env.PERSISTENCE_REDIS_HOST);
+    redis = Redis.createClient(parseInt(process.env.REDIS_PORT), process.env.REDIS_HOST);
 
     redis.on('connect', function() {
 
