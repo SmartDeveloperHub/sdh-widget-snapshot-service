@@ -97,7 +97,7 @@ WidgetSnapshotProvider.prototype = {
         var success = job.worker.bridge.getPage().evaluate(chartCreateWebFunction, job.data.chart, job.data.metrics, job.data.config); //TODO: maybe asynchronous?
 
         if(!success) {
-            processErrorEvent("Some king of error happened.");
+            processErrorEvent("Some kind of error happened.");
         }
 
     }
@@ -246,7 +246,7 @@ var phantomWebMessageHandler = function(data) {
 
 var chartDeleteWebFunction = function() {
 
-    window.resetOptimizations();
+    window.resetOptimizations && window.resetOptimizations();
 
     //Clear previous chart
     if(window.chart != null) {

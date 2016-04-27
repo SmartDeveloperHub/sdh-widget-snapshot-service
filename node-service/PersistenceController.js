@@ -21,7 +21,6 @@
 
 const uuid = require('node-uuid');
 const fs = require('fs');
-const config = require('./../config');
 const path = require('path');
 
 var freeingStorageSpace = false;
@@ -30,9 +29,9 @@ var freeingStorageSpace = false;
 var persistFile = function(tmp_file, mime, cb) {
 
     var fileId = uuid.v4();
-    var fileName = config.persistence.prefix + fileId;
+    var fileName = process.env.PERSISTENCE_PREFIX + fileId;
     var newFilePath = path.join(
-        config.persistence.directory,
+        process.env.PERSISTENCE_DIRECTORY,
         fileName
     );
 
@@ -60,7 +59,7 @@ var persistFile = function(tmp_file, mime, cb) {
             redis.incrby('totalSpace', stats.size, function (err, total) {
                 if (err) return console.error(err);
 
-                if (total > config.persistence.max_size) {
+                if (total > process.env.PERSISTENCE_MAX_SIZE) {
                     freeStorageSpace();
                 }
             });
@@ -89,7 +88,7 @@ var getPersistedFile = function(fileId, cb) {
         }
 
         var filePath = path.join(
-            config.persistence.directory,
+            process.env.PERSISTENCE_DIRECTORY,
             fileInfo.name
         );
 
@@ -117,7 +116,7 @@ var freeStorageSpace = function () {
 
             var currentSize = parseInt(val);
 
-            var amountToFree = currentSize - (config.persistence.max_size * config.persistence.free_percentage / 100);
+            var amountToFree = currentSize - (process.env.PERSISTENCE_MAX_SIZE * process.env.PERSISTENCE_FREE_PERCENTAGE / 100);
             var freedAmount = 0;
             //TODO: make sure the space is decremented before freeingStorageSpace is set to false
 
@@ -132,7 +131,7 @@ var freeStorageSpace = function () {
                     redis.decrby('totalSpace', size);
 
                     var filePath = path.join(
-                        config.persistence.directory,
+                        process.env.PERSISTENCE_DIRECTORY,
                         name
                     );
 

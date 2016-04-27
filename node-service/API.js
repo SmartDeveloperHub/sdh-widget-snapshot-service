@@ -22,9 +22,7 @@
 const http = require('http');
 const PersistenceController = require('./PersistenceController');
 const Job = require('./../common/Job');
-const config = require('../config');
 const fs = require('fs');
-const mime = require('mime');
 
 var app = require('express')();
 
@@ -103,7 +101,7 @@ var handlePersistentImagePostRequest = function(req, res) {
         res.status(status).send(msg);
     };
 
-    var job = new Job(makePhantomImageRequest, jobData, config.phantom.timeout, onAbort);
+    var job = new Job(makePhantomImageRequest, jobData, parseInt(process.env.PHANTOM_TIMEOUT), onAbort);
 
     jobQueue.executeOrQueueJob(job, false);
 
@@ -182,7 +180,7 @@ var handleImageGetRequest = function(req, res) {
         res.status(status).send(msg);
     };
 
-    var job = new Job(makePhantomImageRequest, jobData, config.phantom.timeout, onAbort);
+    var job = new Job(makePhantomImageRequest, jobData, parseInt(process.env.PHANTOM_TIMEOUT), onAbort);
 
     jobQueue.executeOrQueueJob(job, false);
 

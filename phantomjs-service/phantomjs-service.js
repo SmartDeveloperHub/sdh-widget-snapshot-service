@@ -28,7 +28,6 @@ var system = require('system');
 var WidgetSnapshotProvider = require('./WidgetSnapshotProvider');
 var WorkerPool = require('./../common/WorkerPool');
 var Job = require('./../common/Job');
-var config = require('./../config.js');
 
 var workerPool = null;
 var widgets = null;
@@ -39,6 +38,7 @@ var NUMBER_WORKERS = 0;
 var LISTEN_PORT = 0;
 var TIMEOUT = 0;
 var LISTEN_IP = "127.0.0.1";
+var API_URL = "";
 
 var PROVIDER_INITIALIZATION_ERROR = 1;
 var API_INITIALIZATION_ERROR = 2;
@@ -46,14 +46,15 @@ var API_INITIALIZATION_ERROR = 2;
 var main = function() {
 
     // Process parameters
-    if(system.args.length != 2 || system.args[1] == "") {
-        console.log('Usage: phantomjs  PhantomService.js  LISTEN_PORT');
+    if(system.args.length != 5 || system.args[1] == "") {
+        console.log('Usage: phantomjs  PhantomService.js  LISTEN_PORT NUMBER_WORKERS TIMEOUT API_URL');
         phantom.exit();
     }
 
-    NUMBER_WORKERS = parseInt(config.phantom.executors_per_worker);
-    TIMEOUT = parseInt(config.phantom.timeout);
+    NUMBER_WORKERS = parseInt(system.args[2]);
+    TIMEOUT = parseInt(system.args[3]);
     LISTEN_PORT = parseInt(system.args[1]);
+    API_URL = system.args[4];
 
 
     //Get a list with information about available widgets
@@ -86,7 +87,7 @@ var launchWorker = function(cb) {
     }
 
     var snapshotProvider = new WidgetSnapshotProvider(nextWorkerId++, workerPool, onKill);
-    snapshotProvider.init(requireJsWidgetList, config.api.url, function(snapshotProvider, success) {
+    snapshotProvider.init(requireJsWidgetList, system.args[4], function(snapshotProvider, success) {
 
         if(!success) {
             console.error("Unable to init WidgetSnapshotProvider");

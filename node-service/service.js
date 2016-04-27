@@ -24,13 +24,12 @@ const fs = require('fs');
 const WorkerPool = require('./../common/WorkerPool');
 const PhantomWorker = require('./PhantomWorker');
 const JobQueue = require('./JobQueue');
-const config = require('./../config');
 const Redis = require('redis');
 const API = require('./API');
 
-var PORT_SEARCH_BEGIN = config.phantom.start_port; //Number of port to start looking for free ports
-var LISTEN_PORT = config.port;
-var NUMBER_WORKERS = config.phantom.workers;
+var PORT_SEARCH_BEGIN; //Number of port to start looking for free ports
+var LISTEN_PORT;
+var NUMBER_WORKERS;
 
 // Globals
 global.redis = null;
@@ -40,7 +39,15 @@ global.jobQueue = null;
 
 var start = function() {
 
-    redis = Redis.createClient(config.persistence.redis.port, config.persistence.redis.host);
+    var dotenv = require('dotenv');
+    // Load environment variables, either from .env files (development)
+    dotenv.load();
+
+    PORT_SEARCH_BEGIN = parseInt(process.env.PHANTOM_START_PORT);
+    LISTEN_PORT = parseInt(process.env.PORT);
+    NUMBER_WORKERS = parseInt(process.env.PHANTOM_WORKERS);
+
+    redis = Redis.createClient(parseInt(process.env.PERSISTENCE_REDIS_PORT), process.env.PERSISTENCE_REDIS_HOST);
 
     redis.on('connect', function() {
 

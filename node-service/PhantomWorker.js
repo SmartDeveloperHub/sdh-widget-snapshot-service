@@ -21,7 +21,6 @@
 
 "use strict";
 
-var config = require('../config');
 var childProcess = require('child_process');
 var phantomjs = require('phantomjs-prebuilt');
 var path = require('path');
@@ -44,13 +43,16 @@ function PhantomWorker (port, workerPool, onReady, onKill) {
     var childArgs = [
         "--web-security=false",
         path.join(__dirname, '..', 'phantomjs-service', 'phantomjs-service.js'),
-        port
+        port,
+        process.env.PHANTOM_EXECUTORS_PER_WORKER,
+        process.env.PHANTOM_TIMEOUT,
+        process.env.API_URL
     ];
 
-    if(config.phantom.cache) {
+    if(process.env.CACHE) {
         childArgs.unshift("--disk-cache=true");
-        if(config.phantom.cache_limit > 0) {
-            childArgs.unshift("--max-disk-cache-size=" + parseInt(config.phantom.cache_limit));
+        if(process.env.CACHE_LIMIT > 0) {
+            childArgs.unshift("--max-disk-cache-size=" + parseInt(process.env.CACHE_LIMIT));
         }
     }
 
