@@ -254,6 +254,9 @@ var chartDeleteWebFunction = function() {
         window.chart.delete();
     }
 
+    // Reset common widget colors
+    framework.widgets.CommonWidget.prototype.previousColors = {};
+
     $("body").empty();
 
 };
