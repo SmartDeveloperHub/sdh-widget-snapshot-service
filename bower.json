@@ -2,9 +2,9 @@
   "name": "sdh-web",
   "dependencies": {
     "bootstrap": "3.3.4",
-    "requirejs": "2.x.x",
+    "requirejs": "2.2.x",
     "require-css": "0.1.8",
-    "sdh-framework": "master"
+    "sdh-framework": "0.7.0"
   },
   "resolutions": {
     "jquery": "2.1.x"

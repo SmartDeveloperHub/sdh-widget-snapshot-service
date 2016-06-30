@@ -156,7 +156,7 @@ var obtainWidgetList = function() {
                 widgetList.push({
                     name: config.name,
                     main: config.main,
-                    requireJsPath: 'vendor/sdh-framework/widgets/' + dirContents[x] + '/' + mainFileWithoutJs
+                    requireJsPath: 'sdh-framework/widgets/' + dirContents[x] + '/' + mainFileWithoutJs
                 })
 
             } catch(e) {
