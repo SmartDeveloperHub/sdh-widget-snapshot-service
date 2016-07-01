@@ -69,7 +69,7 @@ var handlePersistentImagePostRequest = function(req, res) {
 
                     PersistenceController.persistFile(body, 'image/png', function(err, fileId) {
                         if (err) {
-                            console.error("Error moving " + body + " to " + newFilePath, err);
+                            console.error("Error persisting " + body, err);
                             error(err, res, 500);
                             fs.unlink(body); //Remove the temporal file
                         } else {

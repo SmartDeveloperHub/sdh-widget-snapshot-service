@@ -69,7 +69,7 @@ require.config({
     shim : {
         'nvd3': {
             exports: 'nv',
-            deps: ['d3']
+            deps: ['d3', 'css!nvd3']
         },
         'headerHandler': {
             deps: ['jquery']
