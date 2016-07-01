@@ -46,7 +46,7 @@ function PhantomWorker (port, workerPool, onReady, onKill) {
         port,
         process.env.PHANTOM_EXECUTORS_PER_WORKER,
         process.env.PHANTOM_TIMEOUT,
-        process.env.API_URL
+        process.env.SDH_API_URL
     ];
 
     if(process.env.CACHE) {
